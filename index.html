@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>fMRI · Face Task + Short-Form Video Browsing (Dual-Mode Template)</title>
+<style>
+/* ============ Base ============ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: #111; color: #ddd; overflow: hidden; }
+.hidden { display: none !important; }
+:root { --panel-w: 34%; }  /* Mode 1 panel width — adjust as needed */
+
+/* ============ Settings screen ============ */
+#settingsScreen { height: 100%; overflow-y: auto; padding: 28px; }
+.settings-card { max-width: 780px; margin: 0 auto; background: #1b1b1f; border: 1px solid #333; border-radius: 12px; padding: 28px 32px; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+.card-head h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+.settings-card .sub { color: #888; font-size: 13px; margin-bottom: 22px; }
+.lang-toggle { display: flex; gap: 6px; flex-shrink: 0; }
+.lang-btn { padding: 5px 14px; font-size: 12px; border-radius: 999px; border: 1px solid #444; background: #26262c; color: #aaa; cursor: pointer; }
+.lang-btn.active { background: #3a86ff; border-color: #3a86ff; color: #fff; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field.full { grid-column: 1 / -1; }
+.field label { font-size: 13px; color: #bbb; }
+.field input, .field select { width: 100%; background: #26262c; border: 1px solid #444; color: #eee; border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+.field select { text-overflow: ellipsis; }
+.field input:focus, .field select:focus { outline: none; border-color: #6af; }
+.field .hint { font-size: 11px; color: #777; }
+.field input[type=checkbox] { width: 18px; height: 18px; }
+.check-row { display: flex; align-items: center; gap: 8px; }
+.btn-row { margin-top: 24px; display: flex; gap: 12px; }
+.btn { padding: 11px 22px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; }
+.btn-primary { background: #3a86ff; color: #fff; }
+.btn-primary:hover { background: #2f74e8; }
+.btn-ghost { background: #2a2a30; color: #ccc; border: 1px solid #444; }
+.btn-ghost:hover { background: #33333b; }
+#vidCount { color: #8fd08f; font-size: 13px; margin-bottom: 14px; }
+details.protocol { margin-top: 22px; background: #202024; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; font-size: 13px; }
+details.protocol summary { cursor: pointer; color: #9cc; }
+details.protocol pre { background: #16161a; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin-top: 10px; color: #cde; }
+details.protocol ol { margin: 10px 0 6px 22px; line-height: 1.9; }
+details.protocol table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+details.protocol th, details.protocol td { text-align: left; padding: 4px 14px 4px 0; font-size: 12px; }
+details.protocol th { color: #999; border-bottom: 1px solid #444; }
+details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* ============ Run screen ============ */
+#runScreen { position: fixed; inset: 0; background: #000; }
+#taskArea { position: absolute; inset: 0; background: #808080; transition: margin-right .25s ease; }  /* gray level adjustable */
+#runBody.panel-open #taskArea { margin-right: var(--panel-w); }
+#taskFrame { width: 100%; height: 100%; border: none; display: block; }
+
+/* Mode 1: slide-in side panel */
+#panel { position: absolute; top: 0; right: 0; bottom: 0; width: var(--panel-w); background: #000;
+         transform: translateX(105%); transition: transform .25s ease; z-index: 10; }
+#runBody.panel-open #panel { transform: none; }
+#panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+
+/* Mode 2: full-page switch */
+#fullscreen { position: fixed; inset: 0; background: #000; z-index: 20; }
+#fsBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+
+/* Video box (vertical 9:16; letterboxing handled by video object-fit / canvas) */
+#videoBox { position: relative; height: 100%; aspect-ratio: 9 / 16; max-width: 100%; margin: 0 auto; background: #000; overflow: hidden; }
+#vid, #fakeCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#vid { object-fit: contain; background: #000; }
+#fakeCanvas { background: #000; }
+
+/* TikTok-style decorations */
+#decorCol { position: absolute; right: 10px; bottom: 90px; display: flex; flex-direction: column; gap: 18px;
+            align-items: center; color: #fff; font-size: 26px; text-shadow: 0 1px 3px rgba(0,0,0,.6); z-index: 5; }
+#decorCol span { font-size: 11px; display: block; text-align: center; }
+#vidInfo { position: absolute; left: 12px; right: 60px; bottom: 14px; color: #fff; z-index: 5;
+           text-shadow: 0 1px 3px rgba(0,0,0,.7); font-size: 14px; }
+#vidInfo p { font-size: 12px; color: #ddd; margin-top: 2px; }
+#vidProgress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.25); z-index: 6; }
+#vidProgressBar { height: 100%; width: 0; background: #fff; }
+#videoBox.fake #vidProgressBar { animation: fakebar 8s linear infinite; }
+@keyframes fakebar { from { width: 0; } to { width: 100%; } }
+
+/* Trigger-wait black screen */
+#blackout { position: fixed; inset: 0; background: #000; z-index: 30; display: flex; align-items: center; justify-content: center;
+            color: #555; font-size: 20px; letter-spacing: 2px; }
+
+/* End screen */
+#endScreen { position: fixed; inset: 0; background: #111; z-index: 40; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; gap: 20px; }
+#endTitle { font-size: 26px; color: #fff; }
+#endStats { font-size: 15px; color: #bbb; text-align: left; line-height: 2; }
+#endStats table { border-collapse: collapse; }
+#endStats td { padding: 3px 14px 3px 0; }
+</style>
+</head>
+<body>
+
+<!-- ==================== Settings screen (experimenter) ==================== -->
+<div id="settingsScreen">
+  <div class="settings-card">
+    <div class="card-head">
+      <h1 data-i18n="app.title">fMRI · Face Task + Short-Form Video Browsing</h1>
+      <div class="lang-toggle">
+        <button class="lang-btn active" id="langEn">EN</button>
+        <button class="lang-btn" id="langZh">中文</button>
+      </div>
+    </div>
+    <div class="sub" data-i18n="sub">Subject keys: A = toggle video · B = next video · 1/2 = task responses (when a task page is connected)</div>
+    <div id="vidCount">Detecting video pool…</div>
+
+    <div class="grid">
+      <div class="field full">
+        <label for="f_mode" data-i18n="field.videoMode">Video mode</label>
+        <select id="f_mode">
+          <option value="1" data-i18n="opt.mode1">Mode 1 · Slide-in side panel (task runs in parallel)</option>
+          <option value="2" data-i18n="opt.mode2">Mode 2 · Full-page switch (task hidden)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="f_mode2task" data-i18n="field.mode2task">Task behavior in Mode 2</label>
+        <select id="f_mode2task">
+          <option value="hide" data-i18n="opt.mode2taskHide">Keep running hidden (no task-page changes needed)</option>
+          <option value="pause" data-i18n="opt.mode2taskPause">Pause via message (needs task-page support; falls back to hidden)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="f_videosource" data-i18n="field.videoSource">Video source</label>
+        <select id="f_videosource">
+          <option value="auto" data-i18n="opt.srcAuto">Auto (real videos if present, else placeholder clips)</option>
+          <option value="force-real" data-i18n="opt.srcReal">Real videos only (videos/manifest.js)</option>
+          <option value="force-fake" data-i18n="opt.srcFake">Placeholder clips only (debugging)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f_duration" data-i18n="field.duration">Run duration (minutes)</label>
+        <input type="number" id="f_duration" value="10" min="0.1" step="0.5">
+      </div>
+      <div class="field">
+        <label for="f_trigger" data-i18n="field.startMode">Start mode</label>
+        <select id="f_trigger">
+          <option value="wait" data-i18n="opt.triggerWait">Wait for trigger key (black screen — scanner pulse)</option>
+          <option value="immediate" data-i18n="opt.triggerImm">Start immediately</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="f_tasksrc" data-i18n="field.taskPage">Task page (face task; empty = built-in placeholder task)</label>
+        <input type="text" id="f_tasksrc" placeholder="e.g. task/index.html  or  http://localhost:8000/task/" data-i18n-ph="ph.taskPage">
+        <div class="hint" data-i18n="hint.taskPage">The task developer drops their page path in here — no changes to this file needed. Protocol below &amp; in README.md</div>
+      </div>
+      <div class="field">
+        <label for="f_triggerkey" data-i18n="field.triggerKey">Trigger key (starts the run from black screen)</label>
+        <input type="text" id="f_triggerkey" value="5" maxlength="4">
+        <div class="hint" data-i18n="hint.triggerKey">Scanner pulse boxes usually map to 5 or t</div>
+      </div>
+      <div class="field">
+        <label for="f_keya" data-i18n="field.keyA">Key A (toggle video)</label>
+        <input type="text" id="f_keya" value="a" maxlength="4">
+      </div>
+      <div class="field">
+        <label for="f_keyb" data-i18n="field.keyB">Key B (next video)</label>
+        <input type="text" id="f_keyb" value="b" maxlength="4">
+      </div>
+      <div class="field">
+        <label for="f_subject" data-i18n="field.subject">Subject ID</label>
+        <input type="text" id="f_subject" value="P01">
+      </div>
+      <div class="field">
+        <label for="f_note" data-i18n="field.note">Note (written to CSV)</label>
+        <input type="text" id="f_note" placeholder="e.g. session 1 / run 2" data-i18n-ph="ph.note">
+      </div>
+      <div class="field check-row" style="margin-top:6px">
+        <input type="checkbox" id="f_sound">
+        <label for="f_sound" data-i18n="field.sound">Play sound (default muted — usually off in the scanner)</label>
+      </div>
+      <div class="field check-row" style="margin-top:6px">
+        <input type="checkbox" id="f_decor" checked>
+        <label for="f_decor" data-i18n="field.decor">TikTok-style decorations (like column · user info · progress bar)</label>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnStart" data-i18n="btn.start">Start experiment</button>
+      <button class="btn btn-ghost" id="btnFullscreen" data-i18n="btn.fullscreen">Fullscreen</button>
+    </div>
+
+    <details class="protocol">
+      <summary data-i18n="subject.summary">Subject instructions (show before the run)</summary>
+      <div id="subjectBody"></div>
+    </details>
+
+    <details class="protocol">
+      <summary data-i18n="guide.summary">Usage Guide (click to open)</summary>
+      <div id="guideBody"></div>
+    </details>
+
+    <details class="protocol">
+      <summary data-i18n="protocol.summary">Integration protocol (for the face-task developer)</summary>
+      <pre id="protocolBody"></pre>
+    </details>
+  </div>
+</div>
+
+<!-- ==================== Run screen ==================== -->
+<div id="runScreen" class="hidden">
+  <div id="runBody">
+    <div id="taskArea">
+      <iframe id="taskFrame" class="hidden" title="task"></iframe>
+    </div>
+    <!-- Mode 1 slide-in panel -->
+    <div id="panel">
+      <div id="panelBox"></div>
+    </div>
+  </div>
+  <!-- Mode 2 full-page -->
+  <div id="fullscreen" class="hidden">
+    <div id="fsBox"></div>
+  </div>
+  <!-- Trigger wait -->
+  <div id="blackout" class="hidden">Waiting for scanner trigger…</div>
+  <!-- End screen -->
+  <div id="endScreen" class="hidden">
+    <div id="endTitle">Experiment complete</div>
+    <div id="endStats"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnDownload" data-i18n="btn.download">Download CSV data</button>
+      <button class="btn btn-ghost" id="btnBack" data-i18n="btn.back">Back to settings (press R)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Video manifest: generated by generate_manifest.py (loaded via script tag for file:// compatibility) -->
+<script src="videos/manifest.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ================= i18n ================= */
+var I18N = {
+  en: {
+    'app.title': 'fMRI · Face Task + Short-Form Video Browsing',
+    'sub': 'Subject keys: A = toggle video · B = next video · 1/2 = task responses (when a task page is connected)',
+    'field.videoMode': 'Video mode',
+    'opt.mode1': 'Mode 1 · Slide-in side panel (task runs in parallel)',
+    'opt.mode2': 'Mode 2 · Full-page switch (task hidden)',
+    'field.mode2task': 'Task behavior in Mode 2',
+    'opt.mode2taskHide': 'Keep running hidden (no task-page changes needed)',
+    'opt.mode2taskPause': 'Pause via message (needs task-page support; falls back to hidden)',
+    'field.videoSource': 'Video source',
+    'opt.srcAuto': 'Auto (real videos if present, else placeholder clips)',
+    'opt.srcReal': 'Real videos only (videos/manifest.js)',
+    'opt.srcFake': 'Placeholder clips only (debugging)',
+    'field.duration': 'Run duration (minutes)',
+    'field.startMode': 'Start mode',
+    'opt.triggerWait': 'Wait for trigger key (black screen — scanner pulse)',
+    'opt.triggerImm': 'Start immediately',
+    'field.taskPage': 'Task page (face task; empty = built-in placeholder task)',
+    'ph.taskPage': 'e.g. task/index.html  or  http://localhost:8000/task/',
+    'hint.taskPage': 'The task developer drops their page path in here — no changes to this file needed. Protocol below & in README.md',
+    'field.triggerKey': 'Trigger key (starts the run from black screen)',
+    'hint.triggerKey': 'Scanner pulse boxes usually map to 5 or t',
+    'field.keyA': 'Key A (toggle video)',
+    'field.keyB': 'Key B (next video)',
+    'field.subject': 'Subject ID',
+    'field.note': 'Note (written to CSV)',
+    'ph.note': 'e.g. session 1 / run 2',
+    'field.sound': 'Play sound (default muted — usually off in the scanner)',
+    'field.decor': 'TikTok-style decorations (like column · user info · progress bar)',
+    'btn.start': 'Start experiment',
+    'btn.fullscreen': 'Fullscreen',
+    'btn.download': 'Download CSV data',
+    'btn.back': 'Back to settings (press R)',
+    'subject.summary': 'Subject instructions (show before the run)',
+    'guide.summary': 'Usage Guide (click to open)',
+    'protocol.summary': 'Integration protocol (for the face-task developer)',
+    'vidCount.ready': 'Video pool: {n} real video(s) detected (videos/manifest.js). Empty pool → built-in placeholder clips.',
+    'vidCount.empty': 'Video pool: videos/manifest.js is empty — built-in placeholder clips will be used. Add MP4s and run generate_manifest.py (see README.md).',
+    'blackout': 'Waiting for trigger… (key {key})',
+    'endTitle.done': 'Experiment complete',
+    'endTitle.aborted': 'Aborted · ',
+    'stats.timesOpened': 'Times video opened',
+    'stats.scrolls': 'Scrolls (key B)',
+    'stats.totalTime': 'Total viewing time',
+    'stats.totalEvents': 'Total events',
+    'phTask.hint': 'placeholder task · waiting for task page',
+    'phTask.keyLabel': 'key: '
+  },
+  zh: {
+    'app.title': 'fMRI · 人脸任务 + 短视频浏览',
+    'sub': '受试者按键：A = 开/关视频 · B = 下一条 · 1/2 = 任务作答（接入任务页后）',
+    'field.videoMode': '视频模式',
+    'opt.mode1': '模式 1 · 右侧滑出面板（任务并行继续）',
+    'opt.mode2': '模式 2 · 整页切换（任务隐藏）',
+    'field.mode2task': '模式 2 时任务行为',
+    'opt.mode2taskHide': '隐藏继续（无需任务页改动）',
+    'opt.mode2taskPause': '消息暂停（需任务页支持；不支持则退化为隐藏）',
+    'field.videoSource': '视频来源',
+    'opt.srcAuto': '自动（有真实视频就用，否则占位动画）',
+    'opt.srcReal': '仅真实视频（videos/manifest.js）',
+    'opt.srcFake': '仅占位动画（调试）',
+    'field.duration': '实验时长（分钟）',
+    'field.startMode': '开始方式',
+    'opt.triggerWait': '等待触发键（黑屏，适合扫描脉冲）',
+    'opt.triggerImm': '立即开始',
+    'field.taskPage': '任务页面（人脸任务；留空 = 内置占位任务）',
+    'ph.taskPage': '例如：task/index.html 或 http://localhost:8000/task/',
+    'hint.taskPage': '任务方把页面路径填这里即可接入，无需改本页代码。协议见下方说明与 README.md',
+    'field.triggerKey': '触发键（黑屏时按此键开始）',
+    'hint.triggerKey': '按钮盒接扫描脉冲通常映射为 5 或 t',
+    'field.keyA': 'A 键（开/关视频）',
+    'field.keyB': 'B 键（下一条视频）',
+    'field.subject': '受试者编号',
+    'field.note': '备注（写入 CSV）',
+    'ph.note': '如 session 1 / run 2',
+    'field.sound': '播放声音（默认静音，扫描间通常不开）',
+    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息 · 进度条）',
+    'btn.start': '开始实验',
+    'btn.fullscreen': '全屏',
+    'btn.download': '下载数据 CSV',
+    'btn.back': '返回设置（按 R 键）',
+    'subject.summary': '被试说明（实验前展示）',
+    'guide.summary': '使用指南（点击展开）',
+    'protocol.summary': '对接协议（给人脸任务开发者）',
+    'vidCount.ready': '视频池：检测到 {n} 条真实视频（videos/manifest.js）。池为空时使用内置占位动画。',
+    'vidCount.empty': '视频池：videos/manifest.js 为空 —— 将使用内置占位动画。放入 MP4 后运行 generate_manifest.py（见 README.md）。',
+    'blackout': '等待触发…（键 {key}）',
+    'endTitle.done': '实验完成',
+    'endTitle.aborted': '提前结束 · ',
+    'stats.timesOpened': '打开视频次数',
+    'stats.scrolls': '滚动次数（B 键）',
+    'stats.totalTime': '总观看时长',
+    'stats.totalEvents': '事件总数',
+    'phTask.hint': '占位任务 · 等待任务页接入',
+    'phTask.keyLabel': '按键: '
+  }
+};
+var LANG = 'en';
+function tr(key){
+  return (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+}
+function trFill(key, map){
+  var s = tr(key);
+  for(var k in map) s = s.replace('{' + k + '}', map[k]);
+  return s;
+}
+function subjectHTML(){
+  return LANG === 'zh'
+    ? '<p style="line-height:1.9">实验过程中，随时按 <b>A</b> 打开视频（模式 1：右侧滑出竖屏面板；模式 2：整页切到视频），按 <b>B</b> 看下一条，再按 <b>A</b> 收起视频回到任务。是否刷视频、刷多久完全由你决定。任务作答用 <b>1</b> / <b>2</b> 键。</p>'
+    : '<p style="line-height:1.9">During the run, press <b>A</b> at any time to open the video (Mode 1: a vertical panel slides in from the right; Mode 2: the page switches to the video), press <b>B</b> to go to the next video, and press <b>A</b> again to close it and return to the task. Whether and how long you browse is entirely up to you. The task responses use keys <b>1</b> / <b>2</b>.</p>';
+}
+function guideHTML(){
+  return LANG === 'zh'
+    ? '<ol>' +
+      '<li>选择<b>视频模式</b>（1：侧滑面板 · 2：整页切换）并调整其他参数。</li>' +
+      '<li>点击<b>开始实验</b>。触发模式下黑屏，直到按下<b>触发键</b>（默认 <code>5</code>）开始。</li>' +
+      '<li>立即体验：<b>任务页面</b>留空即内置占位任务，按 <b>A</b> 打开视频、<b>B</b> 下一条、再按 <b>A</b> 关闭。</li>' +
+      '<li>运行结束（或按 <b>Esc</b>）后，结束页显示统计并自动下载含全部毫秒级事件的 CSV。</li>' +
+      '<li>使用真实视频：把 MP4 放进 <code>videos/</code> 并运行 <code>python3 generate_manifest.py</code>。</li>' +
+      '</ol>' +
+      '<table>' +
+      '<tr><th>按键</th><th>功能</th></tr>' +
+      '<tr><td>A</td><td>打开 / 关闭视频</td></tr>' +
+      '<tr><td>B</td><td>下一条视频</td></tr>' +
+      '<tr><td>1 / 2</td><td>转发给任务页（人脸任务作答）</td></tr>' +
+      '<tr><td>触发键（默认 5）</td><td>黑屏时开始实验</td></tr>' +
+      '<tr><td>Esc</td><td>提前结束（记入日志）</td></tr>' +
+      '<tr><td>R</td><td>返回设置（仅结束页）</td></tr>' +
+      '</table>'
+    : '<ol>' +
+      '<li>Pick a <b>Video mode</b> (1: slide-in panel · 2: full-page switch) and adjust the other settings.</li>' +
+      '<li>Click <b>Start experiment</b>. In trigger mode the screen stays black until the <b>trigger key</b> (default <code>5</code>).</li>' +
+      '<li>Try it now: leave <b>Task page</b> empty to get the built-in placeholder task, then press <b>A</b> to open the video, <b>B</b> to scroll, <b>A</b> to close.</li>' +
+      '<li>When the run ends (or you press <b>Esc</b>), an end screen shows statistics and downloads the CSV of all timestamped events.</li>' +
+      '<li>To use real videos: drop MP4 files into <code>videos/</code> and run <code>python3 generate_manifest.py</code>.</li>' +
+      '</ol>' +
+      '<table>' +
+      '<tr><th>Key</th><th>Action</th></tr>' +
+      '<tr><td>A</td><td>Open / close the video</td></tr>' +
+      '<tr><td>B</td><td>Next video</td></tr>' +
+      '<tr><td>1 / 2</td><td>Forwarded to the task page (face-task responses)</td></tr>' +
+      '<tr><td>Trigger (default 5)</td><td>Start the run from the black screen</td></tr>' +
+      '<tr><td>Esc</td><td>End the run early (logged)</td></tr>' +
+      '<tr><td>R</td><td>Back to settings (end screen only)</td></tr>' +
+      '</table>';
+}
+function protocolHTML(){
+  return LANG === 'zh'
+    ? '任务页与视频层通过 postMessage 双向通信：\n\n' +
+      '【任务页必须做的最小改动】\n' +
+      '1. 绝对不要调用 window.focus()——键盘始终由本页接管\n' +
+      '2. 用消息监听替代 keydown 监听：\n' +
+      '   window.addEventListener(\'message\', function(ev){\n' +
+      '     var m = ev.data;\n' +
+      '     if(!m || m.source !== \'fmri-video\') return;\n' +
+      '     if(m.type === \'key\')     /* 收到按键 m.key（如 "1"、"2"），等价于原 keydown */\n' +
+      '     if(m.type === \'pause\')   /* 可选：暂停任务计时与出题 */\n' +
+      '     if(m.type === \'resume\')  /* 可选：恢复任务 */\n' +
+      '   });\n' +
+      '3. 可选上报（合并进同一份 CSV）：\n' +
+      '   window.parent.postMessage({source:\'task\', type:\'event\',\n' +
+      '     event:{type:\'trial\', ...任何字段}}, \'*\');\n' +
+      '4. 可选：加载完发送 {source:\'task\', type:\'ready\'}，启用模式 2「暂停」功能\n\n' +
+      '完整协议与示例代码见 README.md。'
+    : 'The task page and the video layer talk over postMessage:\n\n' +
+      'Minimal changes the task page must make:\n' +
+      '1. Never call window.focus() — this page owns the keyboard.\n' +
+      '2. Replace keydown handling with forwarded-key messages:\n' +
+      '   window.addEventListener(\'message\', function(ev){\n' +
+      '     var m = ev.data;\n' +
+      '     if(!m || m.source !== \'fmri-video\') return;\n' +
+      '     if(m.type === \'key\')     /* key m.key received (e.g. "1", "2") — same as a keydown */\n' +
+      '     if(m.type === \'pause\')   /* optional: pause task timing */\n' +
+      '     if(m.type === \'resume\')  /* optional: resume task */\n' +
+      '   });\n' +
+      '3. Optional reporting (merged into the same CSV):\n' +
+      '   window.parent.postMessage({source:\'task\', type:\'event\',\n' +
+      '     event:{type:\'trial\', ...any fields}}, \'*\');\n' +
+      '4. Optional: send {source:\'task\', type:\'ready\'} on load to enable Mode 2 "Pause".\n\n' +
+      'Full protocol and example code in README.md.';
+}
+function applyLang(){
+  document.documentElement.lang = LANG;
+  document.title = tr('app.title');
+  var els = document.querySelectorAll('[data-i18n]');
+  for(var i = 0; i < els.length; i++){
+    var k = els[i].getAttribute('data-i18n');
+    if(tr(k)) els[i].textContent = tr(k);
+  }
+  var phs = document.querySelectorAll('[data-i18n-ph]');
+  for(var j = 0; j < phs.length; j++){
+    var k2 = phs[j].getAttribute('data-i18n-ph');
+    if(tr(k2)) phs[j].setAttribute('placeholder', tr(k2));
+  }
+  $('subjectBody').innerHTML = subjectHTML();
+  $('guideBody').innerHTML = guideHTML();
+  $('protocolBody').textContent = protocolHTML();
+  refreshVidCount();
+}
+function setLang(lang){
+  LANG = lang;
+  try { localStorage.setItem('fmri-video-task-lang', LANG); } catch(e){}
+  $('langEn').classList.toggle('active', LANG === 'en');
+  $('langZh').classList.toggle('active', LANG === 'zh');
+  applyLang();
+}
+
+/* ================= Default config ================= */
+var DEFAULTS = {
+  mode: '1', mode2task: 'hide', videosource: 'auto',
+  tasksrc: '', durationMin: 10, sound: false,
+  trigger: 'wait', triggerkey: '5', keya: 'a', keyb: 'b',
+  decor: true, subject: 'P01', note: ''
+};
+var S = {};
+
+/* ================= State ================= */
+var rows = [];            // event log {t, subject, type, key, value, note}
+var t0 = null;            // run start (performance.now base)
+var runActive = false, waitingTrigger = false;
+var videoOpen = false, taskReady = false, warnedPause = false;
+var clipList = [], order = [], curIdx = -1, curClip = null;
+var runTimer = null;
+
+/* ================= DOM ================= */
+function $(id){ return document.getElementById(id); }
+var taskFrame = $('taskFrame');
+var runBody = $('runBody'), panel = $('panel'), panelBox = $('panelBox'),
+    fullscreen = $('fullscreen'), fsBox = $('fsBox'), blackout = $('blackout'),
+    endScreen = $('endScreen');
+var videoBox = null, vid = null, fakeCanvas = null;
+
+/* ================= Placeholder short clips (used when no real videos) ================= */
+var FAKE_CLIPS = [
+  { name:'fake_01', user:'@placeholder_a', caption:'placeholder clip · gradients', h1:260, h2:330 },
+  { name:'fake_02', user:'@placeholder_b', caption:'vertical video placeholder', h1:20,  h2:90  },
+  { name:'fake_03', user:'@placeholder_c', caption:'swipe to next (press B)',   h1:160, h2:230 },
+  { name:'fake_04', user:'@placeholder_d', caption:'fake feed clip #4',         h1:320, h2:40  },
+  { name:'fake_05', user:'@placeholder_e', caption:'this is not real tiktok',   h1:90,  h2:180 },
+  { name:'fake_06', user:'@placeholder_f', caption:'placeholder content only',  h1:200, h2:290 },
+  { name:'fake_07', user:'@placeholder_g', caption:'clip seven · color drift',  h1:40,  h2:130 },
+  { name:'fake_08', user:'@placeholder_h', caption:'last fake clip · loop',     h1:280, h2:10  }
+];
+
+/* ================= Utilities ================= */
+function now(){ return Math.round(performance.now() - t0); }
+function log(type, key, value, note){
+  if(t0 === null) return;
+  rows.push({ t: now(), subject: S.subject, type: type, key: key || '', value: value || '', note: note || '' });
+}
+function shuffle(arr){
+  for(var i = arr.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  return arr;
+}
+function csvEscape(v){
+  v = String(v == null ? '' : v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function postToTask(type, extra){
+  try {
+    var msg = { source: 'fmri-video', type: type };
+    if(extra) for(var k in extra) msg[k] = extra[k];
+    taskFrame.contentWindow.postMessage(msg, '*');
+  } catch(e){ /* iframe not ready — ignore */ }
+}
+
+/* ================= Video pool ================= */
+function buildClipList(){
+  var files = [];
+  try { files = Array.isArray(window.VIDEO_MANIFEST) ? window.VIDEO_MANIFEST : []; }
+  catch(e){ files = []; }
+  var useReal = S.videosource === 'force-real' ? true
+              : S.videosource === 'force-fake' ? false
+              : files.length > 0;
+  if(useReal && files.length > 0){
+    clipList = files.map(function(f, i){
+      return { kind:'file', name: String(f).split('/').pop(), src: f, user: '@clip_' + (i + 1), caption: String(f) };
+    });
+  } else {
+    if(S.videosource === 'force-real' && files.length === 0){
+      log('warn_no_videos', null, null, 'videoSource=force-real but videos/manifest.js is empty; fell back to placeholder clips');
+    }
+    clipList = FAKE_CLIPS.map(function(f){
+      return { kind:'fake', name: f.name, user: f.user, caption: f.caption, cfg: { h1: f.h1, h2: f.h2 } };
+    });
+  }
+  order = shuffle(clipList.map(function(_, i){ return i; }));
+  curIdx = -1; curClip = null;
+}
+
+/* ================= Video playback ================= */
+function makeVideoBox(){
+  videoBox = document.createElement('div');
+  videoBox.id = 'videoBox';
+  videoBox.innerHTML =
+    '<video id="vid" playsinline muted></video>' +
+    '<canvas id="fakeCanvas"></canvas>' +
+    '<div id="decorCol" class="hidden"><div>❤️<span>1.2k</span></div><div>💬<span>34</span></div>' +
+    '<div>↗<span>Share</span></div><div>🔖<span></span></div></div>' +
+    '<div id="vidInfo" class="hidden">@<span id="vidUser"></span><p id="vidCaption"></p></div>' +
+    '<div id="vidProgress"><div id="vidProgressBar"></div></div>';
+  return videoBox;
+}
+function activateContainer(){
+  makeVideoBox();
+  (S.mode === '1' ? panelBox : fsBox).appendChild(videoBox);
+  vid = $('vid'); fakeCanvas = $('fakeCanvas');
+  vid.muted = !S.sound;
+  vid.addEventListener('loadeddata', function(){
+    if(curClip && curClip.kind === 'file') log('video_play', null, curClip.name);
+  });
+  vid.addEventListener('ended', function(){ if(videoOpen) nextClip(); });
+  vid.addEventListener('error', function(){
+    if(!vid.currentSrc) return;   // clearing src is not an error
+    log('video_error', null, curClip ? curClip.name : '');
+    if(videoOpen) nextClip();
+  });
+  vid.addEventListener('timeupdate', function(){
+    if(vid.duration > 0) $('vidProgressBar').style.width = (vid.currentTime / vid.duration * 100) + '%';
+  });
+}
+function updateDecor(){
+  if(!videoBox) return;
+  $('decorCol').classList.toggle('hidden', !S.decor);
+  $('vidInfo').classList.toggle('hidden', !S.decor);
+  if(curClip){
+    $('vidUser').textContent = curClip.user;
+    $('vidCaption').textContent = curClip.caption;
+  }
+  $('vidProgressBar').style.width = '0';
+  videoBox.classList.toggle('fake', curClip && curClip.kind === 'fake');
+}
+function resizeCanvas(){
+  if(!videoBox || !fakeCanvas) return;
+  var w = videoBox.clientWidth, h = videoBox.clientHeight;
+  if(w > 0 && h > 0 && (fakeCanvas.width !== w || fakeCanvas.height !== h)){
+    fakeCanvas.width = w; fakeCanvas.height = h;
+  }
+}
+function drawFake(ts){
+  resizeCanvas();
+  var g = fakeCanvas.getContext('2d'), w = fakeCanvas.width, h = fakeCanvas.height;
+  if(!w || !h) return;
+  var vh = h, vw = Math.min(w, Math.round(h * 9 / 16)), ox = Math.round((w - vw) / 2);  // 9:16 letterbox
+  var t = ts / 1000, cfg = curClip.cfg;
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  var bg = g.createLinearGradient(ox, 0, ox + vw, vh);
+  bg.addColorStop(0, 'hsl(' + ((cfg.h1 + t * 10) % 360) + ' 65% 45%)');
+  bg.addColorStop(1, 'hsl(' + ((cfg.h2 + t * 10) % 360) + ' 70% 22%)');
+  g.fillStyle = bg; g.fillRect(ox, 0, vw, vh);
+  var bx = ox + vw / 2 + Math.sin(t * 0.7) * vw * 0.25, by = vh / 2 + Math.cos(t * 0.9) * vh * 0.2;
+  var r = Math.min(vw, vh) * 0.30;
+  var rg = g.createRadialGradient(bx, by, r * 0.05, bx, by, r);
+  rg.addColorStop(0, 'rgba(255,255,255,.8)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.beginPath(); g.arc(bx, by, r, 0, Math.PI * 2); g.fill();
+  var bx2 = ox + vw * 0.22 + Math.cos(t * 0.5) * vw * 0.12, by2 = vh * 0.24 + Math.sin(t * 0.8) * vh * 0.1;
+  var r2 = Math.min(vw, vh) * 0.16;
+  var rg2 = g.createRadialGradient(bx2, by2, r2 * 0.05, bx2, by2, r2);
+  rg2.addColorStop(0, 'rgba(0,0,0,.35)'); rg2.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = rg2; g.beginPath(); g.arc(bx2, by2, r2, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.95)'; g.textAlign = 'center';
+  g.font = 'bold ' + Math.max(14, Math.round(vh * 0.04)) + 'px system-ui, sans-serif';
+  g.fillText(curClip.caption, ox + vw / 2, vh * 0.9);
+}
+function fakeLoop(ts){
+  if(!videoOpen || !curClip || curClip.kind !== 'fake') return;
+  drawFake(ts);
+  requestAnimationFrame(fakeLoop);
+}
+function showClip(clip){
+  curClip = clip;
+  updateDecor();
+  if(clip.kind === 'file'){
+    fakeCanvas.style.display = 'none'; vid.style.display = 'block';
+    vid.src = clip.src;
+    vid.play().catch(function(){ /* autoplay blocked — ignore (muted default prevents this) */ });
+  } else {
+    vid.pause(); vid.removeAttribute('src'); vid.load();
+    vid.style.display = 'none'; fakeCanvas.style.display = 'block';
+    resizeCanvas();
+    requestAnimationFrame(fakeLoop);
+  }
+}
+function nextClip(){
+  if(!clipList.length) return;
+  curIdx = (curIdx + 1) % order.length;
+  log('video_next', null, clipList[order[curIdx]].name);
+  showClip(clipList[order[curIdx]]);
+}
+function openVideo(){
+  videoOpen = true;
+  if(S.mode === '1') runBody.classList.add('panel-open');
+  else {
+    fullscreen.classList.remove('hidden'); fullscreen.classList.add('open');
+    if(S.mode2task === 'pause'){
+      if(taskReady) postToTask('pause');
+      else if(!warnedPause){ log('warn_task_pause_unsupported', null, null, 'Task page did not report ready; fell back to hidden-continue'); warnedPause = true; }
+    }
+  }
+  if(!curClip){ curIdx = 0; log('video_next', null, clipList[order[curIdx]].name); showClip(clipList[order[curIdx]]); }
+  log('video_open', null, curClip.name);
+  if(curClip.kind === 'file') vid.play().catch(function(){});
+  else requestAnimationFrame(fakeLoop);   // placeholder clips: resume drawing on reopen
+}
+function closeVideo(){
+  if(!videoOpen) return;
+  log('video_close', null, curClip ? curClip.name : '');
+  videoOpen = false;
+  if(S.mode === '1') runBody.classList.remove('panel-open');
+  else {
+    fullscreen.classList.add('hidden'); fullscreen.classList.remove('open');
+    if(S.mode2task === 'pause' && taskReady) postToTask('resume');
+  }
+  if(curClip && curClip.kind === 'file') vid.pause();
+}
+function toggleVideo(){ videoOpen ? closeVideo() : openVideo(); }
+
+/* ================= Task placeholder area ================= */
+function placeholderHTML(){
+  return (
+    '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+    'body{margin:0;background:#808080;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center}' +
+    '#fix{font-size:22vmin;color:#2f2f2f;user-select:none;font-weight:100}' +
+    '#hint{position:fixed;bottom:10px;left:10px;font:12px monospace;color:#3c3c3c}' +
+    '</style></head><body><div id="fix">+</div><div id="hint">' + tr('phTask.hint') + '</div>' +
+    '<scr' + 'ipt>' +
+    'window.parent.postMessage({source:"task",type:"ready"}, "*");' +
+    'window.addEventListener("message", function(ev){' +
+    '  var m = ev.data; if(!m || m.source !== "fmri-video") return;' +
+    '  if(m.type === "key"){' +
+    '    document.getElementById("hint").textContent = "' + tr('phTask.keyLabel') + '" + m.key;' +
+    '    window.parent.postMessage({source:"task",type:"event",event:{type:"keypress",key:m.key}}, "*");' +
+    '  } else if(m.type === "pause"){' +
+    '    window.parent.postMessage({source:"task",type:"event",event:{type:"paused"}}, "*");' +
+    '  } else if(m.type === "resume"){' +
+    '    window.parent.postMessage({source:"task",type:"event",event:{type:"resumed"}}, "*");' +
+    '  }' +
+    '});' +
+    '<\/scr' + 'ipt></body></html>'
+  );
+}
+function setupTaskArea(){
+  if(S.tasksrc){
+    taskFrame.removeAttribute('srcdoc');
+    taskFrame.src = S.tasksrc;
+    taskFrame.classList.remove('hidden');
+  } else {
+    taskFrame.srcdoc = placeholderHTML();
+    taskFrame.classList.remove('hidden');
+  }
+}
+/* Task page → this page messages */
+window.addEventListener('message', function(ev){
+  var m = ev.data;
+  if(!m || m.source !== 'task') return;
+  if(m.type === 'ready'){ taskReady = true; log('task_ready'); }
+  else if(m.type === 'event'){
+    var e = m.event || {};
+    log('task_event', null, e.type || '', JSON.stringify(e));
+  }
+});
+
+/* ================= Key routing (this page always owns the keyboard) ================= */
+window.addEventListener('keydown', function(e){
+  var k = e.key ? e.key.toLowerCase() : '';
+  if(waitingTrigger){
+    if(k === S.triggerkey.toLowerCase()){
+      waitingTrigger = false;
+      beginRun();
+      log('trigger', S.triggerkey);
+    } else if(k === 'escape'){
+      location.reload();   // cancel waiting, back to settings
+    }
+    return;
+  }
+  if(!runActive){
+    if(endScreen && !endScreen.classList.contains('hidden') && k === 'r') location.reload();
+    return;
+  }
+  log('key', k, null, e.repeat ? 'repeat' : 'press');
+  if(e.repeat) return;
+  if(k === S.keya.toLowerCase()) toggleVideo();
+  else if(k === S.keyb.toLowerCase()){ if(videoOpen) nextClip(); }
+  else if(k === 'escape') endRun('abort');
+  else postToTask('key', { key: k });
+});
+
+/* ================= Run lifecycle ================= */
+function readSettings(){
+  S = {
+    mode: $('f_mode').value,
+    mode2task: $('f_mode2task').value,
+    videosource: $('f_videosource').value,
+    tasksrc: $('f_tasksrc').value.trim(),
+    durationMin: Math.max(0.1, parseFloat($('f_duration').value) || 10),
+    sound: $('f_sound').checked,
+    trigger: $('f_trigger').value,
+    triggerkey: ($('f_triggerkey').value.trim() || '5').toLowerCase(),
+    keya: ($('f_keya').value.trim() || 'a').toLowerCase(),
+    keyb: ($('f_keyb').value.trim() || 'b').toLowerCase(),
+    decor: $('f_decor').checked,
+    subject: $('f_subject').value.trim() || 'P01',
+    note: $('f_note').value.trim()
+  };
+}
+function saveSettings(){ try { localStorage.setItem('fmri-video-task-settings', JSON.stringify(S)); } catch(e){} }
+function loadSettings(){
+  var d = {};
+  try { d = JSON.parse(localStorage.getItem('fmri-video-task-settings') || '{}'); } catch(e){ d = {}; }
+  for(var k in DEFAULTS) if(!(k in d)) d[k] = DEFAULTS[k];
+  $('f_mode').value = d.mode; $('f_mode2task').value = d.mode2task;
+  $('f_videosource').value = d.videosource; $('f_tasksrc').value = d.tasksrc;
+  $('f_duration').value = d.durationMin; $('f_sound').checked = d.sound;
+  $('f_trigger').value = d.trigger; $('f_triggerkey').value = d.triggerkey;
+  $('f_keya').value = d.keya; $('f_keyb').value = d.keyb;
+  $('f_decor').checked = d.decor; $('f_subject').value = d.subject; $('f_note').value = d.note;
+}
+function startRun(){
+  readSettings();
+  saveSettings();
+  rows = []; t0 = null; videoOpen = false; taskReady = false; warnedPause = false;
+  buildClipList();
+  $('settingsScreen').classList.add('hidden');
+  $('runScreen').classList.remove('hidden');
+  $('endScreen').classList.add('hidden');
+  runBody.classList.remove('panel-open');
+  fullscreen.classList.add('hidden'); fullscreen.classList.remove('open');
+  activateContainer();
+  setupTaskArea();
+  window.focus();
+  if(S.trigger === 'immediate'){
+    beginRun();
+  } else {
+    waitingTrigger = true;
+    blackout.textContent = trFill('blackout', { key: S.triggerkey });
+    blackout.classList.remove('hidden');
+  }
+}
+function beginRun(){
+  t0 = performance.now();
+  blackout.classList.add('hidden');
+  runActive = true;
+  log('session_start', null, null, 'mode=' + S.mode + ' mode2task=' + S.mode2task +
+      ' videosource=' + S.videosource + ' durationMin=' + S.durationMin +
+      ' sound=' + S.sound + ' decor=' + S.decor + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
+      ' note=' + S.note);
+  runTimer = setTimeout(function(){ endRun('timeout'); }, S.durationMin * 60000);
+}
+function computeStats(){
+  var openCount = 0, scrollCount = 0, totalMs = 0, perName = {};
+  var openT = null, openName = '';
+  for(var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if(r.type === 'video_open') openCount++;
+    if(r.type === 'video_next') scrollCount++;
+    if(r.type === 'video_open'){ openT = r.t; openName = r.value; }
+    else if(r.type === 'video_close' && openT !== null){
+      var d = r.t - openT;
+      totalMs += d; perName[openName] = (perName[openName] || 0) + d; openT = null;
+    }
+  }
+  return { openCount: openCount, scrollCount: scrollCount, totalMs: totalMs, perName: perName };
+}
+function endRun(reason){
+  if(!runActive) return;
+  runActive = false;
+  clearTimeout(runTimer);
+  if(videoOpen) closeVideo();
+  log('run_end', null, reason || 'timeout');
+  postToTask('resume');
+  var s = computeStats();
+  $('endTitle').textContent = (reason === 'abort' ? tr('endTitle.aborted') : '') + tr('endTitle.done');
+  var html = '<table><tr><td>' + tr('stats.timesOpened') + '</td><td><b>' + s.openCount + '</b></td></tr>' +
+             '<tr><td>' + tr('stats.scrolls') + '</td><td><b>' + s.scrollCount + '</b></td></tr>' +
+             '<tr><td>' + tr('stats.totalTime') + '</td><td><b>' + (s.totalMs / 1000).toFixed(1) + ' s</b></td></tr>';
+  for(var n in s.perName){
+    html += '<tr><td>· ' + n + '</td><td>' + (s.perName[n] / 1000).toFixed(1) + ' s</td></tr>';
+  }
+  html += '<tr><td>' + tr('stats.totalEvents') + '</td><td><b>' + rows.length + '</b></td></tr></table>';
+  $('endStats').innerHTML = html;
+  endScreen.classList.remove('hidden');
+  try { downloadCSV(); } catch(e){}
+}
+function downloadCSV(){
+  var head = 't_ms,subject,type,key,value,note';
+  var lines = rows.map(function(r){
+    return [r.t, r.subject, r.type, r.key, r.value, r.note].map(csvEscape).join(',');
+  });
+  var blob = new Blob(['﻿' + head + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.download = (S.subject || 'subj') + '_' + stamp + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
+}
+function refreshVidCount(){
+  var files = [];
+  try { files = Array.isArray(window.VIDEO_MANIFEST) ? window.VIDEO_MANIFEST : []; } catch(e){ files = []; }
+  $('vidCount').textContent = files.length > 0
+    ? trFill('vidCount.ready', { n: files.length })
+    : tr('vidCount.empty');
+}
+
+/* ================= Init ================= */
+(function init(){
+  var saved = null;
+  try { saved = localStorage.getItem('fmri-video-task-lang'); } catch(e){}
+  if(saved === 'zh' || saved === 'en') LANG = saved;
+  setLang(LANG);
+  loadSettings();
+  $('langEn').addEventListener('click', function(){ setLang('en'); });
+  $('langZh').addEventListener('click', function(){ setLang('zh'); });
+  $('btnStart').addEventListener('click', startRun);
+  $('btnFullscreen').addEventListener('click', function(){
+    (document.documentElement.requestFullscreen || function(){}).call(document.documentElement);
+  });
+  $('btnDownload').addEventListener('click', downloadCSV);
+  $('btnBack').addEventListener('click', function(){ location.reload(); });
+})();
+
+})();
+</script>
+</body>
+</html>

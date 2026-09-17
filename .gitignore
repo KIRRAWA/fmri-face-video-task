@@ -1,0 +1,7 @@
+# Keep the manifest in git, ignore the actual video files (large media)
+videos/*.mp4
+videos/*.webm
+videos/*.m4v
+
+# macOS
+.DS_Store
