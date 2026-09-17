@@ -58,6 +58,25 @@ Settings are remembered automatically (localStorage).
 Playback rules: randomized order, no immediate repeats, endless looping, B advances clip by clip — mimics a live feed.
 Copyright note: real videos for the study must be provided by the lab (own account content or licensed content). This template ships no real videos — the placeholder clips are animated, not real.
 
+### Batch auto-download (download_videos.py)
+
+A wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp) (which does the crawling/pagination) with experiment-friendly defaults — set a source and a count, and it fetches automatically:
+
+```bash
+python3 download_videos.py "https://www.tiktok.com/@account" --count 50
+python3 download_videos.py --urls urls.txt --count 20          # one URL per line
+python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
+```
+
+- Fetches up to `--count` videos **per source** (a profile URL = that account's clips)
+- Skips clips longer than `--max-duration` seconds (default 90) to keep the stream short-form
+- Caps resolution at 1080p, keeps H.264/AAC so the scanner browser plays everything
+- Remembers already-downloaded videos (`videos/downloaded.txt`) — reruns only fetch new clips
+- Regenerates `videos/manifest.js` automatically at the end
+
+Other options: `--proxy URL` / `--no-proxy` (bypass dead proxy env vars), `--cookies-from-browser chrome` (videos that require login), `--skip-manifest`.
+Use your own account's content or licensed material, per lab/IRB policy.
+
 ## Key reference
 
 | Key | Action |
@@ -229,6 +248,25 @@ fmri-face-video-task/
 
 播放规则：随机排序、同条不连续、循环不到头，B 键逐条切换——模拟「实时推荐流」。
 版权提醒：正式实验视频由实验室自备（自己账号内容或获授权内容），本模板不内置任何真实视频——内置的是动画占位内容，不是真实视频。
+
+### 批量自动下载（download_videos.py）
+
+基于 [yt-dlp](https://github.com/yt-dlp/yt-dlp)（负责爬取/翻页）的包装脚本，带实验友好的默认值——给定来源和数量，自动抓取：
+
+```bash
+python3 download_videos.py "https://www.tiktok.com/@账号" --count 50
+python3 download_videos.py --urls urls.txt --count 20          # 每行一个链接
+python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
+```
+
+- 每个来源最多下载 `--count` 条（给主页链接 = 该账号的视频）
+- 自动跳过超过 `--max-duration` 秒的视频（默认 90 秒），保持短视频节奏
+- 分辨率上限 1080p、H.264/AAC，扫描间浏览器直接能播
+- 记住已下载的视频（`videos/downloaded.txt`），重复运行只抓新的
+- 结束后自动重新生成 `videos/manifest.js`
+
+其他选项：`--proxy URL` / `--no-proxy`（绕开失效的代理环境变量）、`--cookies-from-browser chrome`（需登录才能看的视频）、`--skip-manifest`。
+请使用自己账号或获授权的内容，并遵守实验室/IRB 规定。
 
 ## 按键总表
 

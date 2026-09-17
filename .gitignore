@@ -3,5 +3,8 @@ videos/*.mp4
 videos/*.webm
 videos/*.m4v
 
+# yt-dlp download state (machine-specific)
+videos/downloaded.txt
+
 # macOS
 .DS_Store
