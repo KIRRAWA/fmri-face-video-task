@@ -29,7 +29,23 @@ EXTS = (".mp4", ".webm", ".m4v")
 
 
 def run(cmd, env=None):
-    return subprocess.run(cmd, cwd=HERE, env=env).returncode
+    """Run a command, streaming its output. Returns True on success.
+
+    yt-dlp exits non-zero when --max-downloads stops the crawl early, even
+    though every download up to the cap succeeded, so treat that marker as
+    success too.
+    """
+    proc = subprocess.Popen(
+        cmd, cwd=HERE, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    )
+    reached_cap = False
+    for line in proc.stdout:
+        print(line, end="", flush=True)
+        if "Maximum number of downloads reached" in line:
+            reached_cap = True
+    proc.wait()
+    return proc.returncode == 0 or reached_cap
 
 
 def read_sources(urls_file):
@@ -75,7 +91,7 @@ def main():
     base = [
         "yt-dlp",
         "--download-archive", ARCHIVE,          # skip already-downloaded videos
-        "-S", f"{sort},ext:mp4:m4a",            # H.264/AAC, capped resolution
+        "-S", f"{sort},vcodec:h264,ext:mp4:m4a",  # H.264/AAC, capped resolution
         "-o", "videos/%(id)s.%(ext)s",          # numeric TikTok id as filename
         "--restrict-filenames",
         "--max-downloads", str(args.count),
@@ -90,7 +106,7 @@ def main():
     failed = []
     for src in sources:
         print(f"\n=== {src} ===", flush=True)
-        if run(base + [src], env=env) != 0:
+        if not run(base + [src], env=env):
             failed.append(src)
 
     if not args.skip_manifest:
