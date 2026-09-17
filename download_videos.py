@@ -16,11 +16,15 @@ Examples:
   python3 download_videos.py "https://www.tiktok.com/@account" --count 50
   python3 download_videos.py --urls urls.txt --count 20
   python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
+  python3 download_videos.py --feed 50 --cookies-from-browser edge
+      (crawls the logged-in For You feed — videos from many authors)
 """
 import argparse
+import json
 import os
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VDIR = os.path.join(HERE, "videos")
@@ -55,12 +59,78 @@ def read_sources(urls_file):
         return [ln.strip() for ln in fp if ln.strip() and not ln.startswith("#")]
 
 
+# --- For You feed crawling ------------------------------------------------
+# With a logged-in session, TikTok's web API serves the personalized feed
+# (videos from many different authors). We page through it, collect
+# single-video URLs, and hand them to yt-dlp in one batch.
+FEED_API = "https://www.tiktok.com/api/recommend/item_list/"
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+FEED_COOKIES = os.path.join(tempfile.gettempdir(), "tt_feed_cookies.txt")
+
+
+def export_cookies(browser, env=None):
+    """Export the browser's TikTok cookies to a Netscape file for the feed API.
+
+    Uses --flat-playlist + --playlist-items so extraction touches only the
+    first profile item and finishes in seconds (otherwise yt-dlp would page
+    through the whole @tiktok profile before writing the cookie file).
+    """
+    subprocess.run(
+        ["yt-dlp", "--cookies-from-browser", browser, "--cookies", FEED_COOKIES,
+         "--skip-download", "--flat-playlist", "--playlist-items", "1",
+         "-O", "%(id)s", "https://www.tiktok.com/@tiktok"],
+        cwd=HERE, env=env, capture_output=True)
+
+
+def collect_feed_videos(count, max_duration, per_author=3, env=None):
+    """Page through the logged-in For You feed, collecting single-video URLs.
+
+    Returns up to `count` + 15 URLs (margin for clips that fail to download),
+    at most `per_author` clips from any one author, skipping photo/live items
+    and clips longer than `max_duration` (0 = no limit).
+    """
+    urls, seen_ids, seen_authors = [], set(), {}
+    cursor = 0
+    while len(urls) < count + 15 and cursor <= 330:
+        url = f"{FEED_API}?aid=1988&count=30&cursor={cursor}"
+        proc = subprocess.run(
+            ["curl", "-s", "-b", FEED_COOKIES, "-A", UA,
+             "-H", "Referer: https://www.tiktok.com/", url],
+            capture_output=True, text=True, env=env)
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            break
+        items = data.get("itemList") or []
+        if not items:
+            break
+        cursor += len(items)
+        for it in items:
+            vid = it.get("id")
+            author = (it.get("author") or {}).get("uniqueId")
+            duration = (it.get("video") or {}).get("duration")
+            if not vid or not author or not duration:
+                continue  # photo/live/ads have no video duration
+            if vid in seen_ids or seen_authors.get(author, 0) >= per_author:
+                continue
+            if max_duration > 0 and duration > max_duration:
+                continue
+            seen_ids.add(vid)
+            seen_authors[author] = seen_authors.get(author, 0) + 1
+            urls.append(f"https://www.tiktok.com/@{author}/video/{vid}")
+    return urls
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Auto-download N short videos per source into videos/ and refresh the manifest.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     ap.add_argument("sources", nargs="*", help="TikTok profile or single-video URLs")
+    ap.add_argument("--feed", type=int, default=0,
+                    help="crawl the logged-in For You feed for N videos from many "
+                         "authors (requires --cookies-from-browser)")
     ap.add_argument("--urls", help="text file with one URL per line (# = comment)")
     ap.add_argument("--count", type=int, default=50, help="max videos to download per source")
     ap.add_argument("--max-duration", type=int, default=90,
@@ -78,8 +148,6 @@ def main():
     args = ap.parse_args()
 
     sources = list(args.sources) + read_sources(args.urls)
-    if not sources:
-        ap.error("provide at least one TikTok URL (profile or video) or --urls <file>")
 
     env = os.environ.copy()
     if args.no_proxy:
@@ -87,14 +155,32 @@ def main():
                   "all_proxy", "ALL_PROXY"):
             env.pop(k, None)
 
+    if args.feed > 0:
+        if not args.cookies_from_browser:
+            ap.error("--feed needs a logged-in session: pass --cookies-from-browser")
+        print(f"=== For You feed (collecting {args.feed} videos) ===", flush=True)
+        export_cookies(args.cookies_from_browser, env=env)
+        sources = collect_feed_videos(args.feed, args.max_duration, env=env)
+        if not sources:
+            print("Feed returned no videos (session expired? sign in again).", flush=True)
+            sys.exit(1)
+        n_authors = len({u.split("/")[3] for u in sources})
+        print(f"Collected {len(sources)} video URLs from {n_authors} authors.", flush=True)
+
+    if not sources:
+        ap.error("provide at least one TikTok URL (profile or video), --urls <file>, "
+                 "or --feed N")
+
     sort = f"res:{args.max_resolution}" if args.max_resolution > 0 else "res:1080"
+    # In feed mode the cap is --feed itself; otherwise --count per source.
+    max_downloads = args.feed if args.feed > 0 else args.count
     base = [
         "yt-dlp",
         "--download-archive", ARCHIVE,          # skip already-downloaded videos
         "-S", f"{sort},vcodec:h264,ext:mp4:m4a",  # H.264/AAC, capped resolution
         "-o", "videos/%(id)s.%(ext)s",          # numeric TikTok id as filename
         "--restrict-filenames",
-        "--max-downloads", str(args.count),
+        "--max-downloads", str(max_downloads),
     ]
     if args.max_duration > 0:
         base += ["--match-filter", f"duration <= {args.max_duration}"]
@@ -104,10 +190,17 @@ def main():
         base += ["--cookies-from-browser", args.cookies_from_browser]
 
     failed = []
-    for src in sources:
-        print(f"\n=== {src} ===", flush=True)
-        if not run(base + [src], env=env):
-            failed.append(src)
+    if args.feed > 0:
+        # One batch invocation with the logged-in session:
+        # --max-downloads caps it at args.count.
+        batch = base + ["--cookies-from-browser", args.cookies_from_browser] + sources
+        if not run(batch, env=env):
+            failed.append("For You feed")
+    else:
+        for src in sources:
+            print(f"\n=== {src} ===", flush=True)
+            if not run(base + [src], env=env):
+                failed.append(src)
 
     if not args.skip_manifest:
         print("\n=== regenerating manifest ===", flush=True)
