@@ -44,7 +44,7 @@ Panel width = CSS variable `--panel-w` (in `:root` of index.html, default 34%).
 | Trigger key | Default `5`; scanner pulse boxes usually map to 5 or t |
 | Keys A / B | Remappable (button boxes send standard key codes, same as a keyboard) |
 | Sound | Muted by default (scanner rooms are loud; use MR-compatible headphones if enabled) |
-| TikTok-style decorations | Like column / user info / progress bar on/off |
+| TikTok-style decorations | Like column / user info on placeholder clips only; real videos play clean (progress bar always shown) |
 | Subject ID / Note | Written into the CSV |
 
 Settings are remembered automatically (localStorage).
@@ -235,7 +235,7 @@ fmri-face-video-task/
 | 触发键 | 默认 `5`，按钮盒接 TTL 脉冲通常映射 5 或 t |
 | A / B 键 | 可改（按钮盒键码与键盘一致） |
 | 声音 | 默认静音（扫描间噪音大；开声需扫描间耳机） |
-| TikTok 装饰 | 点赞列 / 用户信息 / 进度条开关 |
+| TikTok 装饰 | 点赞列 / 用户信息仅显示在占位动画上；真实视频无装饰（进度条始终显示） |
 | 受试者编号 / 备注 | 写入 CSV |
 
 设置自动记忆（localStorage）。

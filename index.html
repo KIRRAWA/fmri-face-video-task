@@ -264,7 +264,7 @@ var I18N = {
     'field.note': 'Note (written to CSV)',
     'ph.note': 'e.g. session 1 / run 2',
     'field.sound': 'Play sound (default muted — usually off in the scanner)',
-    'field.decor': 'TikTok-style decorations (like column · user info · progress bar)',
+    'field.decor': 'TikTok-style decorations (like column · user info) — placeholder clips only',
     'btn.start': 'Start experiment',
     'btn.fullscreen': 'Fullscreen',
     'btn.download': 'Download CSV data',
@@ -312,7 +312,7 @@ var I18N = {
     'field.note': '备注（写入 CSV）',
     'ph.note': '如 session 1 / run 2',
     'field.sound': '播放声音（默认静音，扫描间通常不开）',
-    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息 · 进度条）',
+    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息）— 仅占位动画',
     'btn.start': '开始实验',
     'btn.fullscreen': '全屏',
     'btn.download': '下载数据 CSV',
@@ -562,14 +562,17 @@ function activateContainer(){
 }
 function updateDecor(){
   if(!videoBox) return;
-  $('decorCol').classList.toggle('hidden', !S.decor);
-  $('vidInfo').classList.toggle('hidden', !S.decor);
-  if(curClip){
+  // The like/comment column and user info are simulated — placeholder
+  // clips only. Real files play clean; the progress bar is real and stays.
+  var isFake = curClip && curClip.kind === 'fake';
+  $('decorCol').classList.toggle('hidden', !S.decor || !isFake);
+  $('vidInfo').classList.toggle('hidden', !S.decor || !isFake);
+  if(isFake){
     $('vidUser').textContent = curClip.user;
     $('vidCaption').textContent = curClip.caption;
   }
   $('vidProgressBar').style.width = '0';
-  videoBox.classList.toggle('fake', curClip && curClip.kind === 'fake');
+  videoBox.classList.toggle('fake', isFake);
 }
 function resizeCanvas(){
   if(!videoBox || !fakeCanvas) return;
