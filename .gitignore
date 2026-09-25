@@ -3,6 +3,9 @@ videos/*.mp4
 videos/*.webm
 videos/*.m4v
 
+# Mode 3 center task video (downloaded for offline runs)
+center/
+
 # yt-dlp download state (machine-specific)
 videos/downloaded.txt
 

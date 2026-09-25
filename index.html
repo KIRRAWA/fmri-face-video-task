@@ -71,7 +71,8 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 #panelLeft .panelBox, #panelRight .panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 #runBody.pop-left #taskArea { margin-left: var(--panel-w); }
 #runBody.pop-right #taskArea { margin-right: var(--panel-w); }
-#centerVideo { width: 100%; height: 100%; border: none; display: block; background: #000; }
+#centerVideo, #centerVideoEl { width: 100%; height: 100%; border: none; display: block; background: #000; }
+#centerVideoEl { object-fit: contain; }
 
 /* Video box (vertical 9:16; letterboxing handled by video object-fit / canvas).
    class (not id) — Mode 3 runs two players at once. */
@@ -161,9 +162,9 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <input type="number" id="f_popinterval" value="10" min="2" step="1">
       </div>
       <div class="field full">
-        <label for="f_centervideo" data-i18n="field.centerVideo">Mode 3 center video (YouTube URL; empty = task page placeholder)</label>
-        <input type="text" id="f_centervideo" placeholder="https://www.youtube.com/watch?v=…" data-i18n-ph="ph.centerVideo">
-        <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. Needs internet — or download it first for offline runs (README).</div>
+        <label for="f_centervideo" data-i18n="field.centerVideo">Mode 3 center video (YouTube URL or local video file; empty = task page placeholder)</label>
+        <input type="text" id="f_centervideo" placeholder="center/center.mp4 or a YouTube URL" data-i18n-ph="ph.centerVideo">
+        <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.</div>
       </div>
       <div class="field full">
         <label for="f_videosource" data-i18n="field.videoSource">Video source</label>
@@ -248,6 +249,7 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
     <div id="taskArea">
       <iframe id="taskFrame" class="hidden" title="task"></iframe>
       <iframe id="centerVideo" class="hidden" title="center video" allow="autoplay; fullscreen"></iframe>
+      <video id="centerVideoEl" class="hidden" muted loop autoplay playsinline title="center video (local file)"></video>
     </div>
     <!-- Mode 1 slide-in panel -->
     <div id="panel">
@@ -298,9 +300,9 @@ var I18N = {
     'opt.popManual': 'Manual (subject presses A)',
     'opt.popAuto': 'Auto (pops up on a timer)',
     'field.popInterval': 'Auto popup interval (seconds)',
-    'field.centerVideo': 'Mode 3 center video (YouTube URL; empty = task page placeholder)',
-    'ph.centerVideo': 'https://www.youtube.com/watch?v=…',
-    'hint.centerVideo': 'The boring center video subjects watch while short videos pop up on the sides. Needs internet — or download it first for offline runs (README).',
+    'field.centerVideo': 'Mode 3 center video (YouTube URL or local video file; empty = task page placeholder)',
+    'ph.centerVideo': 'center/center.mp4 or a YouTube URL',
+    'hint.centerVideo': 'The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.',
     'field.mode2task': 'Task behavior in Mode 2',
     'opt.mode2taskHide': 'Keep running hidden (no task-page changes needed)',
     'opt.mode2taskPause': 'Pause via message (needs task-page support; falls back to hidden)',
@@ -359,9 +361,9 @@ var I18N = {
     'opt.popManual': '手动（受试者按 A）',
     'opt.popAuto': '自动（定时弹出）',
     'field.popInterval': '自动弹出间隔（秒）',
-    'field.centerVideo': '模式 3 居中视频（YouTube 链接；留空 = 任务页占位）',
-    'ph.centerVideo': 'https://www.youtube.com/watch?v=…',
-    'hint.centerVideo': '受试者观看的居中任务视频，两侧随机弹出短视频。需要联网；也可先下载后离线播放（见 README）。',
+    'field.centerVideo': '模式 3 居中视频（YouTube 链接或本地视频文件；留空 = 任务页占位）',
+    'ph.centerVideo': 'center/center.mp4 或 YouTube 链接',
+    'hint.centerVideo': '受试者观看的居中任务视频，两侧随机弹出短视频。填本地文件（如 center/center.mp4）可离线播放；YouTube 需联网。',
     'field.mode2task': '模式 2 时任务行为',
     'opt.mode2taskHide': '隐藏继续（无需任务页改动）',
     'opt.mode2taskPause': '消息暂停（需任务页支持；不支持则退化为隐藏）',
@@ -522,7 +524,7 @@ var DEFAULTS = {
   trigger: 'wait', triggerkey: '5', keya: 'a', keyb: 'b',
   decor: true, subject: 'P01', note: '',
   popside: 'random', poptrigger: 'manual', popinterval: 10,
-  centervideo: 'https://www.youtube.com/watch?v=g5WkOr565I4'
+  centervideo: 'center/center.mp4'
 };
 var S = {};
 
@@ -536,7 +538,7 @@ var runTimer = null, popIntervalTimer = null;
 
 /* ================= DOM ================= */
 function $(id){ return document.getElementById(id); }
-var taskFrame = $('taskFrame'), centerVideo = $('centerVideo');
+var taskFrame = $('taskFrame'), centerVideo = $('centerVideo'), centerVideoEl = $('centerVideoEl');
 var runBody = $('runBody'), panel = $('panel'), panelBox = $('panelBox'),
     popL = $('panelLeft'), popR = $('panelRight'),
     panelBoxL = $('panelBoxL'), panelBoxR = $('panelBoxR'),
@@ -896,9 +898,19 @@ function toEmbedUrl(url){
 }
 function setupTaskArea(){
   centerVideo.classList.add('hidden');
+  centerVideoEl.classList.add('hidden');
   if(S.mode === '3' && S.centervideo){
-    centerVideo.src = toEmbedUrl(S.centervideo);
-    centerVideo.classList.remove('hidden');
+    // Video file (local path or direct .mp4/.webm URL) → <video> element:
+    // autoplays muted and works offline. YouTube/other web links → iframe
+    // (YouTube URLs are converted to embeds by toEmbedUrl).
+    if(!/^https?:\/\//.test(S.centervideo) || /\.(mp4|webm|m4v|mov)([?#]|$)/i.test(S.centervideo)){
+      centerVideoEl.src = S.centervideo;
+      centerVideoEl.classList.remove('hidden');
+      centerVideoEl.play().catch(function(){});
+    } else {
+      centerVideo.src = toEmbedUrl(S.centervideo);
+      centerVideo.classList.remove('hidden');
+    }
     taskFrame.classList.add('hidden');
   } else if(S.tasksrc){
     taskFrame.removeAttribute('srcdoc');
@@ -981,6 +993,10 @@ function loadSettings(){
   var d = {};
   try { d = JSON.parse(localStorage.getItem('fmri-video-task-settings') || '{}'); } catch(e){ d = {}; }
   for(var k in DEFAULTS) if(!(k in d)) d[k] = DEFAULTS[k];
+  // 2026-09-25: the previous default was a YouTube URL that fails as an embed
+  // on many machines — migrate saved settings to the shipped local file once.
+  if(d.centervideo === 'https://www.youtube.com/watch?v=g5WkOr565I4')
+    d.centervideo = DEFAULTS.centervideo;
   $('f_mode').value = d.mode; $('f_mode2task').value = d.mode2task;
   $('f_videosource').value = d.videosource; $('f_tasksrc').value = d.tasksrc;
   $('f_duration').value = d.durationMin; $('f_sound').checked = d.sound;

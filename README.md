@@ -44,7 +44,7 @@ task area to the other side. Both panels can be open at once (one per side).
 | Pop-up side | **Random** (default) / both / left only / right only |
 | Pop-up trigger | **Manual** (A opens/closes a pop-up — "internally generated" browsing) / **Auto** (a pop-up opens on its own every N seconds and closes when its clip ends — "externally probed") |
 | Pop-up interval | Auto mode only: seconds between auto pop-ups |
-| Center video | URL of the task video shown centered (YouTube links are auto-converted to embeds; empty = built-in placeholder task). **YouTube needs internet** — for offline scanner runs, download the file and enter its local path |
+| Center video | URL of the task video shown centered (YouTube links auto-convert to embeds; local/remote video files play in a built-in player). Defaults to `center/center.mp4`, a local clip that works offline — YouTube needs internet |
 
 Key mapping in Mode 3: **A** = pop up / close (per the side setting; "both" opens both),
 **B** = next clip in every open panel.
@@ -290,7 +290,7 @@ fmri-face-video-task/
 | 模式 3 弹出方向 | 随机 / 两侧 / 仅左 / 仅右 |
 | 模式 3 弹出方式 | 手动（按 A 开关）/ 自动（每 N 秒弹出、播完自动收起） |
 | 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
-| 中央视频 | 居中任务视频 URL（YouTube 自动转嵌入；留空 = 内置占位任务）。YouTube 需联网，离线请用本地文件 |
+| 中央视频 | 居中任务视频 URL（YouTube 自动转嵌入；本地/远程视频文件用内置播放器播放）。默认 `center/center.mp4`——本地片段，离线可用；YouTube 需联网 |
 | 视频来源 | 自动 / 仅真实视频 / 仅占位动画（调试） |
 | 实验时长 | 分钟，可小数 |
 | 任务页面 | 人脸任务页面路径（留空 = 内置占位任务）。**填这个就是「接入」** |
