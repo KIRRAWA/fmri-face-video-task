@@ -1,14 +1,17 @@
 # fMRI · Face Task + Short-Form Video Browsing (Dual-Mode Template)
 
 Subjects perform a boring face-recognition task in the scanner while voluntarily browsing short-form videos.
-**Key A** = open/close the video, **Key B** = next video. Two video modes, chosen by the experimenter before the run.
+**Key A** = open/close the video, **Key B** = next video. Three video modes, chosen by the experimenter before the run.
 
 ```
 fmri-face-video-task/
   index.html              # main page (single file, double-click to open, works offline)
   generate_manifest.py    # scans videos/ and generates the video manifest
+  get_authors.py          # rebuilds videos/authors.json (per-video author metadata)
+  download_videos.py      # optional batch auto-downloader (yt-dlp wrapper)
   videos/
     manifest.js           # video manifest (auto-generated)
+    authors.json          # per-video author metadata (auto-generated)
     *.mp4                 # lab-provided short videos (optional)
   README.md
 ```
@@ -20,7 +23,7 @@ fmri-face-video-task/
 3. (Trigger mode) The screen stays black until the trigger key (default `5`)
 4. When the run ends, statistics are shown and the CSV is downloaded automatically
 
-## Two video modes
+## Three video modes
 
 | | Mode 1 · Slide-in panel | Mode 2 · Full-page switch |
 |---|---|---|
@@ -31,12 +34,34 @@ fmri-face-video-task/
 
 Panel width = CSS variable `--panel-w` (in `:root` of index.html, default 34%).
 
+### Mode 3 · Center task + random pop-ups (lab meeting design 4)
+
+The task runs **centered**; videos **pop up from the left or right**, squeezing the
+task area to the other side. Both panels can be open at once (one per side).
+
+| Setting | Options |
+|---|---|
+| Pop-up side | **Random** (default) / both / left only / right only |
+| Pop-up trigger | **Manual** (A opens/closes a pop-up — "internally generated" browsing) / **Auto** (a pop-up opens on its own every N seconds and closes when its clip ends — "externally probed") |
+| Pop-up interval | Auto mode only: seconds between auto pop-ups |
+| Center video | URL of the task video shown centered (YouTube links are auto-converted to embeds; empty = built-in placeholder task). **YouTube needs internet** — for offline scanner runs, download the file and enter its local path |
+
+Key mapping in Mode 3: **A** = pop up / close (per the side setting; "both" opens both),
+**B** = next clip in every open panel.
+
+Every video shows its **@author label bottom-left** (plus the caption, when available) —
+see "Author metadata" below.
+
 ## Settings
 
 | Setting | Description |
 |---|---|
-| Video mode | Mode 1 / Mode 2 |
+| Video mode | Mode 1 / Mode 2 / Mode 3 |
 | Task behavior in Mode 2 | Keep running hidden / Pause via message (falls back to hidden + logged warning if the task page doesn't support it) |
+| Mode 3 pop-up side | Random / both / left only / right only |
+| Mode 3 pop-up trigger | Manual (A opens/closes) / Auto (opens every N seconds, closes when the clip ends) |
+| Pop-up interval | Auto mode only: seconds between auto pop-ups |
+| Center video | Task video URL shown centered (YouTube links auto-converted to embeds; empty = built-in placeholder task). YouTube needs internet — use a local file for offline runs |
 | Video source | Auto / real videos only / placeholder clips only (debugging) |
 | Run duration | Minutes, decimals allowed |
 | Task page | Path to the face-task page (empty = built-in placeholder task). **Filling this in is the "integration"** |
@@ -44,7 +69,7 @@ Panel width = CSS variable `--panel-w` (in `:root` of index.html, default 34%).
 | Trigger key | Default `5`; scanner pulse boxes usually map to 5 or t |
 | Keys A / B | Remappable (button boxes send standard key codes, same as a keyboard) |
 | Sound | Muted by default (scanner rooms are loud; use MR-compatible headphones if enabled) |
-| TikTok-style decorations | Like column / user info on placeholder clips only; real videos play clean (progress bar always shown) |
+| TikTok-style decorations | Like column / user info on placeholder clips only; **real videos show their @author label bottom-left** (+ caption when available; progress bar always shown) |
 | Subject ID / Note | Written into the CSV |
 
 Settings are remembered automatically (localStorage).
@@ -57,6 +82,21 @@ Settings are remembered automatically (localStorage).
 
 Playback rules: randomized order, no immediate repeats, endless looping, B advances clip by clip — mimics a live feed.
 Copyright note: real videos for the study must be provided by the lab (own account content or licensed content). This template ships no real videos — the placeholder clips are animated, not real.
+
+### Author metadata (the @author label)
+
+Every pool video shows **@author** bottom-left. Metadata lives in `videos/authors.json`
+(video id → `{author, nick, desc}`), which `generate_manifest.py` bakes into the manifest.
+It is filled automatically:
+
+- `download_videos.py` records the author for every video it downloads (feed crawls also capture the caption);
+- `get_authors.py` rebuilds the file from scratch — it pages the logged-in For You feed first, then resolves anything unmatched via TikTok's embed page (`https://www.tiktok.com/embed/v2/{video_id}`, which serves the author in plain HTML).
+
+```bash
+python3 get_authors.py --cookies-from-browser edge --pages 10
+```
+
+If no author is known the UI falls back to `@unknown`.
 
 ### Batch auto-download (download_videos.py)
 
@@ -81,8 +121,8 @@ Use your own account's content or licensed material, per lab/IRB policy.
 
 | Key | Action |
 |---|---|
-| A (remappable) | Open / close the video |
-| B (remappable) | Next video |
+| A (remappable) | Open / close the video (Mode 3: pop up / close, per the side setting) |
+| B (remappable) | Next video (Mode 3: next clip in every open panel) |
 | 1 / 2 | Forwarded to the task page (face-task responses) |
 | Trigger (default 5) | Start the run from the black screen |
 | Esc | End the run early (logged) |
@@ -98,7 +138,7 @@ The settings page has an **EN / 中文** toggle at the top right; the choice is 
 
 During the run the subject performs the face task. At any moment they can:
 
-- press **A** to open the video — Mode 1: a vertical panel slides in from the right while the task keeps running; Mode 2: the whole page switches to the video
+- press **A** to open the video — Mode 1: a vertical panel slides in from the right while the task keeps running; Mode 2: the whole page switches to the video; Mode 3: a video pops up from the left or right (or both) while the task stays centered — and in auto mode pop-ups can also appear on their own
 - press **B** to go to the next video
 - press **A** again to close the video and return to the task
 
@@ -186,20 +226,24 @@ The built-in placeholder task (settings left empty) is written against exactly t
 - **A video won't play** → transcode to H.264 + AAC MP4 (e.g. `ffmpeg -i in.mov -c:v libx264 -pix_fmt yuv420p -c:a aac out.mp4`)
 - **Changed videos but the page doesn't update** → rerun the script + refresh (Ctrl/Cmd+R)
 - **Why not embed live TikTok directly** → TikTok offers no third-party feed API, iframe embeds can't be key-controlled, and a network dependency is risky mid-scan; a pre-downloaded pool is the controllable alternative
+- **Mode 3 center video stays black** → YouTube embeds need internet; for offline scanner runs download the clip (e.g. `yt-dlp URL -o videos/center.mp4`) and enter its path instead, or leave it empty for the built-in placeholder task
 - **file:// limitations** → this template already works around them (manifest loads via a script tag instead of fetch); for HTTP: `python3 -m http.server` then visit `http://localhost:8000/`
 
 ---
 
 # fMRI · 人脸任务 + 短视频浏览（双模式模板）
 
-受试者在扫描仪内做枯燥的人脸识别任务，同时可自愿刷短视频。**A 键** = 开/关视频，**B 键** = 下一条视频。两种视频模式由科学家在实验前选择。
+受试者在扫描仪内做枯燥的人脸识别任务，同时可自愿刷短视频。**A 键** = 开/关视频，**B 键** = 下一条视频。三种视频模式由科学家在实验前选择。
 
 ```
 fmri-face-video-task/
   index.html              # 主页面（单文件，双击即开，离线可用）
   generate_manifest.py    # 扫描 videos/ 生成视频清单
+  get_authors.py          # 重建 videos/authors.json（逐条视频的作者信息）
+  download_videos.py      # 可选批量下载器（yt-dlp 包装）
   videos/
     manifest.js           # 视频清单（自动生成）
+    authors.json          # 逐条视频的作者信息（自动生成）
     *.mp4                 # 实验室自备的短视频（可选）
   README.md
 ```
@@ -211,7 +255,7 @@ fmri-face-video-task/
 3. （触发模式）黑屏等待，按触发键（默认 `5`）开始
 4. 到时间自动结束 → 结束页显示统计并自动下载 CSV
 
-## 两种视频模式
+## 三种视频模式
 
 | | 模式 1 · 侧滑面板 | 模式 2 · 整页切换 |
 |---|---|---|
@@ -222,12 +266,31 @@ fmri-face-video-task/
 
 面板宽度 = CSS 变量 `--panel-w`（index.html 内 `:root`，默认 34%）。
 
+### 模式 3 · 任务居中 + 左右随机弹出（lab meeting 设计 4）
+
+任务**居中**显示，视频从**左侧或右侧弹出**，把任务区挤向另一边；两侧面板可以同时打开（每侧一个）。
+
+| 设置 | 选项 |
+|---|---|
+| 弹出方向 | **随机**（默认）/ 两侧 / 仅左 / 仅右 |
+| 弹出方式 | **手动**（按 A 开/关弹窗——「自发生成」式浏览）/ **自动**（每 N 秒自动弹出，视频播完自动收起——「外部探测」式） |
+| 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
+| 中央视频 | 居中显示的任务视频 URL（YouTube 链接自动转为嵌入；留空 = 内置占位任务）。**YouTube 需联网**——扫描间离线运行请先下载成文件、填本地路径 |
+
+模式 3 按键：**A** = 按方向设置弹出/收起（「两侧」则同时弹出两个），**B** = 每个打开的面板各换下一条。
+
+每条视频左下角显示 **@作者标签**（有文案时一并显示）——见下方「作者信息」。
+
 ## 设置项
 
 | 设置 | 说明 |
 |---|---|
-| 视频模式 | 模式 1 / 模式 2 |
+| 视频模式 | 模式 1 / 模式 2 / 模式 3 |
 | 模式 2 任务行为 | 隐藏继续 / 消息暂停（任务页不支持时自动退化并记入日志） |
+| 模式 3 弹出方向 | 随机 / 两侧 / 仅左 / 仅右 |
+| 模式 3 弹出方式 | 手动（按 A 开关）/ 自动（每 N 秒弹出、播完自动收起） |
+| 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
+| 中央视频 | 居中任务视频 URL（YouTube 自动转嵌入；留空 = 内置占位任务）。YouTube 需联网，离线请用本地文件 |
 | 视频来源 | 自动 / 仅真实视频 / 仅占位动画（调试） |
 | 实验时长 | 分钟，可小数 |
 | 任务页面 | 人脸任务页面路径（留空 = 内置占位任务）。**填这个就是「接入」** |
@@ -235,7 +298,7 @@ fmri-face-video-task/
 | 触发键 | 默认 `5`，按钮盒接 TTL 脉冲通常映射 5 或 t |
 | A / B 键 | 可改（按钮盒键码与键盘一致） |
 | 声音 | 默认静音（扫描间噪音大；开声需扫描间耳机） |
-| TikTok 装饰 | 点赞列 / 用户信息仅显示在占位动画上；真实视频无装饰（进度条始终显示） |
+| TikTok 装饰 | 点赞列 / 用户信息仅显示在占位动画上；**真实视频左下角显示 @作者标签**（有文案时一并显示；进度条始终显示） |
 | 受试者编号 / 备注 | 写入 CSV |
 
 设置自动记忆（localStorage）。
@@ -248,6 +311,19 @@ fmri-face-video-task/
 
 播放规则：随机排序、同条不连续、循环不到头，B 键逐条切换——模拟「实时推荐流」。
 版权提醒：正式实验视频由实验室自备（自己账号内容或获授权内容），本模板不内置任何真实视频——内置的是动画占位内容，不是真实视频。
+
+### 作者信息（@作者标签）
+
+池内每条视频左下角都显示 **@作者**。信息存在 `videos/authors.json`（视频 id → `{author, nick, desc}`），`generate_manifest.py` 会把它写进清单。自动填充：
+
+- `download_videos.py` 下载时即记录每条视频的作者（feed 爬取还能拿到文案）；
+- `get_authors.py` 从头重建——先翻登录态 For You feed，未命中的再用 TikTok 嵌入页（`https://www.tiktok.com/embed/v2/{视频id}`，作者信息直接在 HTML 里）逐条补。
+
+```bash
+python3 get_authors.py --cookies-from-browser edge --pages 10
+```
+
+查不到作者时界面显示 `@unknown`。
 
 ### 批量自动下载（download_videos.py）
 
@@ -272,8 +348,8 @@ python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
 
 | 键 | 功能 |
 |---|---|
-| A（可改） | 开/关视频 |
-| B（可改） | 下一条视频 |
+| A（可改） | 开/关视频（模式 3：按方向设置弹出/收起） |
+| B（可改） | 下一条视频（模式 3：每个打开的面板各换下一条） |
 | 1 / 2 | 转发给任务页（人脸任务作答） |
 | 触发键（默认 5） | 黑屏时开始实验 |
 | Esc | 提前结束（记入日志） |
@@ -289,7 +365,7 @@ python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
 
 实验中受试者做人脸任务，同时随时可以：
 
-- 按 **A** 打开视频——模式 1：右侧滑出竖屏面板，任务继续并行；模式 2：整页切到视频
+- 按 **A** 打开视频——模式 1：右侧滑出竖屏面板，任务继续并行；模式 2：整页切到视频；模式 3：视频从左侧或右侧（或两侧同时）弹出，任务保持居中——自动模式下弹窗也会自己出现
 - 按 **B** 看下一条视频
 - 再按 **A** 收起视频、回到任务
 
@@ -377,4 +453,5 @@ window.parent.postMessage({source:'task', type:'ready'}, '*');
 - **某视频播不出来** → 转成 H.264 + AAC 的 MP4（如 `ffmpeg -i in.mov -c:v libx264 -pix_fmt yuv420p -c:a aac out.mp4`）
 - **改了视频但页面没更新** → 重跑脚本 + 刷新（Ctrl/Cmd+R）
 - **为什么不能直接嵌实时 TikTok** → TikTok 无第三方 feed 接口、iframe 嵌入不可按键控制、依赖网络中途断连风险高；预下载池是可控替代
+- **模式 3 中央视频黑屏** → YouTube 嵌入需要联网；扫描间离线请先下载（如 `yt-dlp URL -o videos/center.mp4`）再填本地路径，或留空用内置占位任务
 - **file:// 限制** → 本模板已规避（清单用 script 标签加载而非 fetch）；如需 HTTP：`python3 -m http.server` 后访问 `http://localhost:8000/`

@@ -22,6 +22,7 @@ Examples:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -86,13 +87,15 @@ def export_cookies(browser, env=None):
 def collect_feed_videos(count, max_duration, per_author=3, env=None):
     """Page through the logged-in For You feed, collecting single-video URLs.
 
-    Returns up to `count` + 15 URLs (margin for clips that fail to download),
-    at most `per_author` clips from any one author, skipping photo/live items
-    and clips longer than `max_duration` (0 = no limit).
+    Returns up to `count` + 15 items (margin for clips that fail to download),
+    each a dict {url, author, nick, desc}; at most `per_author` clips from any
+    one author, skipping photo/live items and clips longer than `max_duration`
+    (0 = no limit). Author metadata is recorded to videos/authors.json so the
+    manifest can show @author labels.
     """
-    urls, seen_ids, seen_authors = [], set(), {}
+    items_out, seen_ids, seen_authors = [], set(), {}
     cursor = 0
-    while len(urls) < count + 15 and cursor <= 330:
+    while len(items_out) < count + 15 and cursor <= 330:
         url = f"{FEED_API}?aid=1988&count=30&cursor={cursor}"
         proc = subprocess.run(
             ["curl", "-s", "-b", FEED_COOKIES, "-A", UA,
@@ -108,18 +111,50 @@ def collect_feed_videos(count, max_duration, per_author=3, env=None):
         cursor += len(items)
         for it in items:
             vid = it.get("id")
-            author = (it.get("author") or {}).get("uniqueId")
+            author = (it.get("author") or {})
+            uname = author.get("uniqueId")
             duration = (it.get("video") or {}).get("duration")
-            if not vid or not author or not duration:
+            if not vid or not uname or not duration:
                 continue  # photo/live/ads have no video duration
-            if vid in seen_ids or seen_authors.get(author, 0) >= per_author:
+            if vid in seen_ids or seen_authors.get(uname, 0) >= per_author:
                 continue
             if max_duration > 0 and duration > max_duration:
                 continue
             seen_ids.add(vid)
-            seen_authors[author] = seen_authors.get(author, 0) + 1
-            urls.append(f"https://www.tiktok.com/@{author}/video/{vid}")
-    return urls
+            seen_authors[uname] = seen_authors.get(uname, 0) + 1
+            items_out.append({
+                "url": f"https://www.tiktok.com/@{uname}/video/{vid}",
+                "author": uname,
+                "nick": author.get("nickname") or "",
+                "desc": it.get("desc") or "",
+            })
+    return items_out
+
+
+def record_authors(source_items, feed_mode=False):
+    """Merge per-video author metadata into videos/authors.json.
+
+    In feed mode `source_items` are the dicts from collect_feed_videos (with
+    author/nick/desc). Otherwise they are plain URLs and the author is parsed
+    from the @username path segment. Existing entries are kept.
+    """
+    path = os.path.join(VDIR, "authors.json")
+    try:
+        with open(path, encoding="utf-8") as fp:
+            meta = json.load(fp)
+    except (OSError, json.JSONDecodeError):
+        meta = {}
+    if feed_mode:
+        for d in source_items:
+            vid = d["url"].rstrip("/").split("/")[-1]
+            meta[vid] = {"author": d["author"], "nick": d["nick"], "desc": d["desc"]}
+    else:
+        for u in source_items:
+            m = re.match(r"https?://(?:www\.)?tiktok\.com/@([^/]+)/video/(\d+)", u)
+            if m:
+                meta[m.group(2)] = {"author": m.group(1), "nick": "", "desc": ""}
+    with open(path, "w", encoding="utf-8") as fp:
+        json.dump(meta, fp, ensure_ascii=False, indent=1)
 
 
 def main():
@@ -164,7 +199,7 @@ def main():
         if not sources:
             print("Feed returned no videos (session expired? sign in again).", flush=True)
             sys.exit(1)
-        n_authors = len({u.split("/")[3] for u in sources})
+        n_authors = len({d["author"] for d in sources})
         print(f"Collected {len(sources)} video URLs from {n_authors} authors.", flush=True)
 
     if not sources:
@@ -193,14 +228,16 @@ def main():
     if args.feed > 0:
         # One batch invocation with the logged-in session:
         # --max-downloads caps it at args.count.
-        batch = base + ["--cookies-from-browser", args.cookies_from_browser] + sources
+        batch = base + ["--cookies-from-browser", args.cookies_from_browser] + [d["url"] for d in sources]
         if not run(batch, env=env):
             failed.append("For You feed")
+        record_authors(sources, feed_mode=True)
     else:
         for src in sources:
             print(f"\n=== {src} ===", flush=True)
             if not run(base + [src], env=env):
                 failed.append(src)
+        record_authors(sources, feed_mode=False)
 
     if not args.skip_manifest:
         print("\n=== regenerating manifest ===", flush=True)

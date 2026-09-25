@@ -63,8 +63,19 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 #fullscreen.open { transform: none; }
 #fsBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 
-/* Video box (vertical 9:16; letterboxing handled by video object-fit / canvas) */
-#videoBox { position: relative; height: 100%; aspect-ratio: 9 / 16; max-width: 100%; margin: 0 auto; background: #000; overflow: hidden; }
+/* Mode 3: task centered, short videos pop in from the left and/or right */
+#panelLeft, #panelRight { position: absolute; top: 0; bottom: 0; width: var(--panel-w); background: #000; z-index: 10; }
+#panelLeft { left: 0; transform: translateX(-105%); transition: transform .3s ease; }
+#panelRight { right: 0; transform: translateX(105%); transition: transform .3s ease; }
+#panelLeft.open, #panelRight.open { transform: none; }
+#panelLeft .panelBox, #panelRight .panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+#runBody.pop-left #taskArea { margin-left: var(--panel-w); }
+#runBody.pop-right #taskArea { margin-right: var(--panel-w); }
+#centerVideo { width: 100%; height: 100%; border: none; display: block; background: #000; }
+
+/* Video box (vertical 9:16; letterboxing handled by video object-fit / canvas).
+   class (not id) — Mode 3 runs two players at once. */
+.videoBox { position: relative; height: 100%; aspect-ratio: 9 / 16; max-width: 100%; margin: 0 auto; background: #000; overflow: hidden; }
 /* Two stacked media layers: the active one sits at translateY(0), the parked one
    below the box. Switching a clip slides the old layer up and the new one in —
    a TikTok-style vertical swipe. */
@@ -73,16 +84,16 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 .mediaLayer video { object-fit: contain; background: #000; }
 .mediaLayer canvas { background: #000; }
 
-/* TikTok-style decorations */
-#decorCol { position: absolute; right: 10px; bottom: 90px; display: flex; flex-direction: column; gap: 18px;
+/* TikTok-style decorations (like column: placeholder clips only; @author label: real videos) */
+.decorCol { position: absolute; right: 10px; bottom: 90px; display: flex; flex-direction: column; gap: 18px;
             align-items: center; color: #fff; font-size: 26px; text-shadow: 0 1px 3px rgba(0,0,0,.6); z-index: 5; }
-#decorCol span { font-size: 11px; display: block; text-align: center; }
-#vidInfo { position: absolute; left: 12px; right: 60px; bottom: 14px; color: #fff; z-index: 5;
+.decorCol span { font-size: 11px; display: block; text-align: center; }
+.vidInfo { position: absolute; left: 12px; right: 60px; bottom: 14px; color: #fff; z-index: 5;
            text-shadow: 0 1px 3px rgba(0,0,0,.7); font-size: 14px; }
-#vidInfo p { font-size: 12px; color: #ddd; margin-top: 2px; }
-#vidProgress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.25); z-index: 6; }
-#vidProgressBar { height: 100%; width: 0; background: #fff; }
-#videoBox.fake #vidProgressBar { animation: fakebar 8s linear infinite; }
+.vidInfo p { font-size: 12px; color: #ddd; margin-top: 2px; }
+.vidProgress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.25); z-index: 6; }
+.vidProgressBar { height: 100%; width: 0; background: #fff; }
+.videoBox.fake .vidProgressBar { animation: fakebar 8s linear infinite; }
 @keyframes fakebar { from { width: 0; } to { width: 100%; } }
 
 /* Trigger-wait black screen */
@@ -119,6 +130,7 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <select id="f_mode">
           <option value="1" data-i18n="opt.mode1">Mode 1 · Slide-in side panel (task runs in parallel)</option>
           <option value="2" data-i18n="opt.mode2">Mode 2 · Full-page switch (task hidden)</option>
+          <option value="3" data-i18n="opt.mode3">Mode 3 · Pop-up panels from left / right (task centered)</option>
         </select>
       </div>
       <div class="field full">
@@ -127,6 +139,31 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
           <option value="hide" data-i18n="opt.mode2taskHide">Keep running hidden (no task-page changes needed)</option>
           <option value="pause" data-i18n="opt.mode2taskPause">Pause via message (needs task-page support; falls back to hidden)</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="f_popsid" data-i18n="field.popSide">Popup side (Mode 3)</label>
+        <select id="f_popsid">
+          <option value="random" data-i18n="opt.popRandom">Random left / right</option>
+          <option value="both" data-i18n="opt.popBoth">Both sides at once</option>
+          <option value="left" data-i18n="opt.popLeft">Left only</option>
+          <option value="right" data-i18n="opt.popRight">Right only</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f_poptrigger" data-i18n="field.popTrigger">Popup trigger (Mode 3)</label>
+        <select id="f_poptrigger">
+          <option value="manual" data-i18n="opt.popManual">Manual (subject presses A)</option>
+          <option value="auto" data-i18n="opt.popAuto">Auto (pops up on a timer)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f_popinterval" data-i18n="field.popInterval">Auto popup interval (seconds)</label>
+        <input type="number" id="f_popinterval" value="10" min="2" step="1">
+      </div>
+      <div class="field full">
+        <label for="f_centervideo" data-i18n="field.centerVideo">Mode 3 center video (YouTube URL; empty = task page placeholder)</label>
+        <input type="text" id="f_centervideo" placeholder="https://www.youtube.com/watch?v=…" data-i18n-ph="ph.centerVideo">
+        <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. Needs internet — or download it first for offline runs (README).</div>
       </div>
       <div class="field full">
         <label for="f_videosource" data-i18n="field.videoSource">Video source</label>
@@ -210,11 +247,15 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
   <div id="runBody">
     <div id="taskArea">
       <iframe id="taskFrame" class="hidden" title="task"></iframe>
+      <iframe id="centerVideo" class="hidden" title="center video" allow="autoplay; fullscreen"></iframe>
     </div>
     <!-- Mode 1 slide-in panel -->
     <div id="panel">
       <div id="panelBox"></div>
     </div>
+    <!-- Mode 3 pop-up panels -->
+    <div id="panelLeft"><div class="panelBox" id="panelBoxL"></div></div>
+    <div id="panelRight"><div class="panelBox" id="panelBoxR"></div></div>
   </div>
   <!-- Mode 2 full-page -->
   <div id="fullscreen" class="hidden">
@@ -247,6 +288,19 @@ var I18N = {
     'field.videoMode': 'Video mode',
     'opt.mode1': 'Mode 1 · Slide-in side panel (task runs in parallel)',
     'opt.mode2': 'Mode 2 · Full-page switch (task hidden)',
+    'opt.mode3': 'Mode 3 · Pop-up panels from left / right (task centered)',
+    'field.popSide': 'Popup side (Mode 3)',
+    'opt.popRandom': 'Random left / right',
+    'opt.popBoth': 'Both sides at once',
+    'opt.popLeft': 'Left only',
+    'opt.popRight': 'Right only',
+    'field.popTrigger': 'Popup trigger (Mode 3)',
+    'opt.popManual': 'Manual (subject presses A)',
+    'opt.popAuto': 'Auto (pops up on a timer)',
+    'field.popInterval': 'Auto popup interval (seconds)',
+    'field.centerVideo': 'Mode 3 center video (YouTube URL; empty = task page placeholder)',
+    'ph.centerVideo': 'https://www.youtube.com/watch?v=…',
+    'hint.centerVideo': 'The boring center video subjects watch while short videos pop up on the sides. Needs internet — or download it first for offline runs (README).',
     'field.mode2task': 'Task behavior in Mode 2',
     'opt.mode2taskHide': 'Keep running hidden (no task-page changes needed)',
     'opt.mode2taskPause': 'Pause via message (needs task-page support; falls back to hidden)',
@@ -269,7 +323,7 @@ var I18N = {
     'field.note': 'Note (written to CSV)',
     'ph.note': 'e.g. session 1 / run 2',
     'field.sound': 'Play sound (default muted — usually off in the scanner)',
-    'field.decor': 'TikTok-style decorations (like column · user info) — placeholder clips only',
+    'field.decor': 'TikTok-style decorations (like column · user info) — placeholder clips only; real videos show the @author label',
     'btn.start': 'Start experiment',
     'btn.fullscreen': 'Fullscreen',
     'btn.download': 'Download CSV data',
@@ -295,6 +349,19 @@ var I18N = {
     'field.videoMode': '视频模式',
     'opt.mode1': '模式 1 · 右侧滑出面板（任务并行继续）',
     'opt.mode2': '模式 2 · 整页切换（任务隐藏）',
+    'opt.mode3': '模式 3 · 左右弹出面板（任务居中）',
+    'field.popSide': '弹出侧（模式 3）',
+    'opt.popRandom': '随机左边 / 右边',
+    'opt.popBoth': '两侧同时弹出',
+    'opt.popLeft': '仅左边',
+    'opt.popRight': '仅右边',
+    'field.popTrigger': '弹出方式（模式 3）',
+    'opt.popManual': '手动（受试者按 A）',
+    'opt.popAuto': '自动（定时弹出）',
+    'field.popInterval': '自动弹出间隔（秒）',
+    'field.centerVideo': '模式 3 居中视频（YouTube 链接；留空 = 任务页占位）',
+    'ph.centerVideo': 'https://www.youtube.com/watch?v=…',
+    'hint.centerVideo': '受试者观看的居中任务视频，两侧随机弹出短视频。需要联网；也可先下载后离线播放（见 README）。',
     'field.mode2task': '模式 2 时任务行为',
     'opt.mode2taskHide': '隐藏继续（无需任务页改动）',
     'opt.mode2taskPause': '消息暂停（需任务页支持；不支持则退化为隐藏）',
@@ -317,7 +384,7 @@ var I18N = {
     'field.note': '备注（写入 CSV）',
     'ph.note': '如 session 1 / run 2',
     'field.sound': '播放声音（默认静音，扫描间通常不开）',
-    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息）— 仅占位动画',
+    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息）— 仅占位动画；真实视频显示 @作者',
     'btn.start': '开始实验',
     'btn.fullscreen': '全屏',
     'btn.download': '下载数据 CSV',
@@ -355,7 +422,7 @@ function subjectHTML(){
 function guideHTML(){
   return LANG === 'zh'
     ? '<ol>' +
-      '<li>选择<b>视频模式</b>（1：侧滑面板 · 2：整页切换）并调整其他参数。</li>' +
+      '<li>选择<b>视频模式</b>（1：侧滑面板 · 2：整页切换 · 3：左右弹出，任务居中）并调整其他参数。</li>' +
       '<li>点击<b>开始实验</b>。触发模式下黑屏，直到按下<b>触发键</b>（默认 <code>5</code>）开始。</li>' +
       '<li>立即体验：<b>任务页面</b>留空即内置占位任务，按 <b>A</b> 打开视频、<b>B</b> 下一条、再按 <b>A</b> 关闭。</li>' +
       '<li>运行结束（或按 <b>Esc</b>）后，结束页显示统计并自动下载含全部毫秒级事件的 CSV。</li>' +
@@ -371,7 +438,7 @@ function guideHTML(){
       '<tr><td>R</td><td>返回设置（仅结束页）</td></tr>' +
       '</table>'
     : '<ol>' +
-      '<li>Pick a <b>Video mode</b> (1: slide-in panel · 2: full-page switch) and adjust the other settings.</li>' +
+      '<li>Pick a <b>Video mode</b> (1: slide-in panel · 2: full-page switch · 3: left/right pop-ups with the task centered) and adjust the other settings.</li>' +
       '<li>Click <b>Start experiment</b>. In trigger mode the screen stays black until the <b>trigger key</b> (default <code>5</code>).</li>' +
       '<li>Try it now: leave <b>Task page</b> empty to get the built-in placeholder task, then press <b>A</b> to open the video, <b>B</b> to scroll, <b>A</b> to close.</li>' +
       '<li>When the run ends (or you press <b>Esc</b>), an end screen shows statistics and downloads the CSV of all timestamped events.</li>' +
@@ -453,7 +520,9 @@ var DEFAULTS = {
   mode: '1', mode2task: 'hide', videosource: 'auto',
   tasksrc: '', durationMin: 10, sound: false,
   trigger: 'wait', triggerkey: '5', keya: 'a', keyb: 'b',
-  decor: true, subject: 'P01', note: ''
+  decor: true, subject: 'P01', note: '',
+  popside: 'random', poptrigger: 'manual', popinterval: 10,
+  centervideo: 'https://www.youtube.com/watch?v=g5WkOr565I4'
 };
 var S = {};
 
@@ -461,18 +530,18 @@ var S = {};
 var rows = [];            // event log {t, subject, type, key, value, note}
 var t0 = null;            // run start (performance.now base)
 var runActive = false, waitingTrigger = false;
-var videoOpen = false, taskReady = false, warnedPause = false;
-var clipList = [], order = [], curIdx = -1, curClip = null;
-var runTimer = null;
+var taskReady = false, warnedPause = false;
+var clipList = [], order = [];
+var runTimer = null, popIntervalTimer = null;
 
 /* ================= DOM ================= */
 function $(id){ return document.getElementById(id); }
-var taskFrame = $('taskFrame');
+var taskFrame = $('taskFrame'), centerVideo = $('centerVideo');
 var runBody = $('runBody'), panel = $('panel'), panelBox = $('panelBox'),
+    popL = $('panelLeft'), popR = $('panelRight'),
+    panelBoxL = $('panelBoxL'), panelBoxR = $('panelBoxR'),
     fullscreen = $('fullscreen'), fsBox = $('fsBox'), blackout = $('blackout'),
     endScreen = $('endScreen');
-var videoBox = null;
-var layers = [], activeL = 0, sliding = false, slideTimer = null;   // two stacked media layers for the swipe transition
 
 /* ================= Placeholder short clips (used when no real videos) ================= */
 var FAKE_CLIPS = [
@@ -521,166 +590,228 @@ function buildClipList(){
               : files.length > 0;
   if(useReal && files.length > 0){
     clipList = files.map(function(f, i){
-      return { kind:'file', name: String(f).split('/').pop(), src: f, user: '@clip_' + (i + 1), caption: String(f) };
+      // entries are {src, author, nick, desc} objects; plain strings still work
+      var src = typeof f === 'string' ? f : f.src;
+      var meta = (typeof f === 'object' && f) ? f : {};
+      return {
+        kind: 'file', name: String(src).split('/').pop(), src: src,
+        user: meta.author ? '@' + meta.author : '@clip_' + (i + 1),
+        author: meta.author || '', desc: meta.desc || ''
+      };
     });
   } else {
     if(S.videosource === 'force-real' && files.length === 0){
       log('warn_no_videos', null, null, 'videoSource=force-real but videos/manifest.js is empty; fell back to placeholder clips');
     }
     clipList = FAKE_CLIPS.map(function(f){
-      return { kind:'fake', name: f.name, user: f.user, caption: f.caption, cfg: { h1: f.h1, h2: f.h2 } };
+      return { kind:'fake', name: f.name, user: f.user, caption: f.caption,
+               author: '', desc: '', cfg: { h1: f.h1, h2: f.h2 } };
     });
   }
   order = shuffle(clipList.map(function(_, i){ return i; }));
-  curIdx = -1; curClip = null;
 }
 
 /* ================= Video playback ================= */
-function makeVideoBox(){
-  videoBox = document.createElement('div');
-  videoBox.id = 'videoBox';
-  videoBox.innerHTML =
-    '<div class="mediaLayer" id="layer0"><video playsinline muted></video><canvas></canvas></div>' +
-    '<div class="mediaLayer" id="layer1"><video playsinline muted></video><canvas></canvas></div>' +
-    '<div id="decorCol" class="hidden"><div>❤️<span>1.2k</span></div><div>💬<span>34</span></div>' +
-    '<div>↗<span>Share</span></div><div>🔖<span></span></div></div>' +
-    '<div id="vidInfo" class="hidden">@<span id="vidUser"></span><p id="vidCaption"></p></div>' +
-    '<div id="vidProgress"><div id="vidProgressBar"></div></div>';
-  return videoBox;
-}
-function activateContainer(){
-  makeVideoBox();
-  (S.mode === '1' ? panelBox : fsBox).appendChild(videoBox);
-  layers = [
-    { el: $('layer0'), video: $('layer0').querySelector('video'), canvas: $('layer0').querySelector('canvas'), clip: null },
-    { el: $('layer1'), video: $('layer1').querySelector('video'), canvas: $('layer1').querySelector('canvas'), clip: null }
-  ];
-  activeL = 0; sliding = false; clearTimeout(slideTimer);
-  layers[0].el.style.transform = 'translateY(0)';
-  layers[1].el.style.transform = 'translateY(100%)';
-  layers.forEach(function(L, i){
-    L.video.muted = !S.sound;
-    L.video.addEventListener('loadeddata', function(){
-      if(videoOpen && L.clip && L.clip.kind === 'file') log('video_play', null, L.clip.name);
+function makePlayer(root, label){
+  var p = {
+    root: root, label: label, open: false,
+    videoBox: null, layers: [], activeL: 0, sliding: false, slideTimer: null,
+    curIdx: -1, curClip: null, startIdx: 0, onEnded: null
+  };
+  p.build = function(){
+    p.videoBox = document.createElement('div');
+    p.videoBox.className = 'videoBox';
+    p.videoBox.innerHTML =
+      '<div class="mediaLayer"><video playsinline muted></video><canvas></canvas></div>' +
+      '<div class="mediaLayer"><video playsinline muted></video><canvas></canvas></div>' +
+      '<div class="decorCol hidden"><div>❤️<span>1.2k</span></div><div>💬<span>34</span></div>' +
+      '<div>↗<span>Share</span></div><div>🔖<span></span></div></div>' +
+      '<div class="vidInfo hidden">@<span class="vidUser"></span><p class="vidCaption"></p></div>' +
+      '<div class="vidProgress"><div class="vidProgressBar"></div></div>';
+    p.root.appendChild(p.videoBox);
+    var els = p.videoBox.querySelectorAll('.mediaLayer');
+    p.layers = [];
+    for(var li = 0; li < els.length; li++){
+      p.layers.push({ el: els[li], video: els[li].querySelector('video'), canvas: els[li].querySelector('canvas'), clip: null });
+    }
+    p.activeL = 0; p.sliding = false; clearTimeout(p.slideTimer);
+    p.layers[0].el.style.transform = 'translateY(0)';
+    p.layers[1].el.style.transform = 'translateY(100%)';
+    p.layers.forEach(function(L, i){
+      L.video.muted = !S.sound;
+      L.video.addEventListener('loadeddata', function(){
+        if(p.open && L.clip && L.clip.kind === 'file') log('video_play', p.label, L.clip.name);
+      });
+      L.video.addEventListener('ended', function(){
+        if(p.open && i === p.activeL) (p.onEnded || p.next)();
+      });
+      L.video.addEventListener('error', function(){
+        if(!L.video.currentSrc) return;   // clearing src is not an error
+        log('video_error', p.label, L.clip ? L.clip.name : '');
+        if(p.open && i === p.activeL) p.next();
+      });
+      L.video.addEventListener('timeupdate', function(){
+        if(i === p.activeL && L.video.duration > 0)
+          p.videoBox.querySelector('.vidProgressBar').style.width = (L.video.currentTime / L.video.duration * 100) + '%';
+      });
     });
-    L.video.addEventListener('ended', function(){ if(videoOpen && i === activeL) nextClip(); });
-    L.video.addEventListener('error', function(){
-      if(!L.video.currentSrc) return;   // clearing src is not an error
-      log('video_error', null, L.clip ? L.clip.name : '');
-      if(videoOpen && i === activeL) nextClip();
-    });
-    L.video.addEventListener('timeupdate', function(){
-      if(i === activeL && L.video.duration > 0)
-        $('vidProgressBar').style.width = (L.video.currentTime / L.video.duration * 100) + '%';
-    });
-  });
+  };
+  p.updateDecor = function(){
+    if(!p.videoBox) return;
+    var decCol = p.videoBox.querySelector('.decorCol');
+    var vidInfo = p.videoBox.querySelector('.vidInfo');
+    var vidUser = p.videoBox.querySelector('.vidUser');
+    var vidCaption = p.videoBox.querySelector('.vidCaption');
+    // The like/comment column is simulated — placeholder clips only. Real
+    // files play clean and always show the @author label bottom-left.
+    var isFake = p.curClip && p.curClip.kind === 'fake';
+    decCol.classList.toggle('hidden', !S.decor || !isFake);
+    vidInfo.classList.toggle('hidden', !p.curClip || (isFake && !S.decor));
+    if(p.curClip){
+      if(isFake){
+        vidUser.textContent = p.curClip.user;
+        vidCaption.textContent = p.curClip.caption;
+        vidCaption.style.display = '';
+      } else {
+        vidUser.textContent = p.curClip.author ? '@' + p.curClip.author : '@unknown';
+        vidCaption.textContent = p.curClip.desc || '';
+        vidCaption.style.display = p.curClip.desc ? '' : 'none';
+      }
+    }
+    p.videoBox.querySelector('.vidProgressBar').style.width = '0';
+    p.videoBox.classList.toggle('fake', isFake);
+  };
+  p.resizeCanvas = function(L){
+    if(!p.videoBox || !L) return;
+    var w = p.videoBox.clientWidth, h = p.videoBox.clientHeight;
+    if(w > 0 && h > 0 && (L.canvas.width !== w || L.canvas.height !== h)){
+      L.canvas.width = w; L.canvas.height = h;
+    }
+  };
+  p.drawFake = function(ts, L){
+    p.resizeCanvas(L);
+    var g = L.canvas.getContext('2d'), w = L.canvas.width, h = L.canvas.height;
+    if(!w || !h) return;
+    var vh = h, vw = Math.min(w, Math.round(h * 9 / 16)), ox = Math.round((w - vw) / 2);  // 9:16 letterbox
+    var t = ts / 1000, cfg = L.clip.cfg;
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    var bg = g.createLinearGradient(ox, 0, ox + vw, vh);
+    bg.addColorStop(0, 'hsl(' + ((cfg.h1 + t * 10) % 360) + ' 65% 45%)');
+    bg.addColorStop(1, 'hsl(' + ((cfg.h2 + t * 10) % 360) + ' 70% 22%)');
+    g.fillStyle = bg; g.fillRect(ox, 0, vw, vh);
+    var bx = ox + vw / 2 + Math.sin(t * 0.7) * vw * 0.25, by = vh / 2 + Math.cos(t * 0.9) * vh * 0.2;
+    var r = Math.min(vw, vh) * 0.30;
+    var rg = g.createRadialGradient(bx, by, r * 0.05, bx, by, r);
+    rg.addColorStop(0, 'rgba(255,255,255,.8)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.beginPath(); g.arc(bx, by, r, 0, Math.PI * 2); g.fill();
+    var bx2 = ox + vw * 0.22 + Math.cos(t * 0.5) * vw * 0.12, by2 = vh * 0.24 + Math.sin(t * 0.8) * vh * 0.1;
+    var r2 = Math.min(vw, vh) * 0.16;
+    var rg2 = g.createRadialGradient(bx2, by2, r2 * 0.05, bx2, by2, r2);
+    rg2.addColorStop(0, 'rgba(0,0,0,.35)'); rg2.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg2; g.beginPath(); g.arc(bx2, by2, r2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.95)'; g.textAlign = 'center';
+    g.font = 'bold ' + Math.max(14, Math.round(vh * 0.04)) + 'px system-ui, sans-serif';
+    g.fillText(L.clip.caption, ox + vw / 2, vh * 0.9);
+  };
+  p.loop = function(ts){
+    if(!p.open || !p.curClip || p.curClip.kind !== 'fake' || p.sliding) return;
+    p.drawFake(ts, p.layers[p.activeL]);
+    requestAnimationFrame(p.loop);
+  };
+  p.prepareLayer = function(L, clip){
+    L.clip = clip;
+    if(clip.kind === 'file'){
+      L.canvas.style.display = 'none'; L.video.style.display = 'block';
+      L.video.src = clip.src;
+      L.video.play().catch(function(){ /* autoplay blocked — ignore (muted default prevents this) */ });
+    } else {
+      L.video.pause(); L.video.removeAttribute('src'); L.video.load();
+      L.video.style.display = 'none'; L.canvas.style.display = 'block';
+      p.drawFake(performance.now(), L);
+    }
+  };
+  p.showClip = function(clip, withSlide){
+    p.curClip = clip;
+    p.updateDecor();
+    if(!withSlide){
+      p.prepareLayer(p.layers[p.activeL], clip);   // first clip: appear in place, no motion
+      return;
+    }
+    var L = p.layers[1 - p.activeL];
+    p.prepareLayer(L, clip);
+    p.sliding = true;
+    L.el.style.transform = 'translateY(0)';                        // incoming rises from below
+    p.layers[p.activeL].el.style.transform = 'translateY(-100%)';  // outgoing exits upward
+    p.slideTimer = setTimeout(function(){ p.completeSlide(false); }, 320);
+  };
+  p.completeSlide = function(snap){
+    if(!p.sliding) return;
+    p.sliding = false;
+    var inL = p.layers[1 - p.activeL], outL = p.layers[p.activeL];
+    outL.video.pause();
+    if(snap){
+      inL.el.style.transition = 'none';
+      inL.el.style.transform = 'translateY(0)';
+      void inL.el.offsetWidth;
+      inL.el.style.transition = '';
+    }
+    outL.el.style.transition = 'none';
+    outL.el.style.transform = 'translateY(100%)';   // park below (clipped by overflow)
+    void outL.el.offsetWidth;
+    outL.el.style.transition = '';
+    p.activeL = 1 - p.activeL;                      // incoming becomes the active layer
+    if(!p.open) return;
+    if(p.curClip.kind === 'fake') requestAnimationFrame(p.loop);
+    if(inL.video.error) p.next();                   // incoming failed to load — skip ahead
+  };
+  p.next = function(){
+    if(!clipList.length) return;
+    if(p.sliding){ clearTimeout(p.slideTimer); p.completeSlide(true); }   // finish current motion instantly
+    p.curIdx = (p.curIdx + 1) % order.length;
+    log('video_next', p.label, clipList[order[p.curIdx]].name);
+    p.showClip(clipList[order[p.curIdx]], true);
+  };
+  p.openPanel = function(){
+    if(p.open) return;
+    p.open = true;
+    if(!p.curClip){
+      p.curIdx = p.startIdx;
+      log('video_next', p.label, clipList[order[p.curIdx]].name);
+      p.showClip(clipList[order[p.curIdx]], false);
+    } else if(p.curClip.kind === 'file'){
+      p.layers[p.activeL].video.play().catch(function(){});
+    } else {
+      requestAnimationFrame(p.loop);   // placeholder clips: resume drawing on reopen
+    }
+    log('video_open', p.label, p.curClip.name);
+  };
+  p.closePanel = function(){
+    if(!p.open) return;
+    log('video_close', p.label, p.curClip ? p.curClip.name : '');
+    p.open = false;
+    p.layers.forEach(function(L){ L.video.pause(); });
+  };
+  return p;
 }
-function updateDecor(){
-  if(!videoBox) return;
-  // The like/comment column and user info are simulated — placeholder
-  // clips only. Real files play clean; the progress bar is real and stays.
-  var isFake = curClip && curClip.kind === 'fake';
-  $('decorCol').classList.toggle('hidden', !S.decor || !isFake);
-  $('vidInfo').classList.toggle('hidden', !S.decor || !isFake);
-  if(isFake){
-    $('vidUser').textContent = curClip.user;
-    $('vidCaption').textContent = curClip.caption;
-  }
-  $('vidProgressBar').style.width = '0';
-  videoBox.classList.toggle('fake', isFake);
-}
-function resizeCanvas(L){
-  if(!videoBox || !L) return;
-  var w = videoBox.clientWidth, h = videoBox.clientHeight;
-  if(w > 0 && h > 0 && (L.canvas.width !== w || L.canvas.height !== h)){
-    L.canvas.width = w; L.canvas.height = h;
-  }
-}
-function drawFake(ts, L){
-  resizeCanvas(L);
-  var g = L.canvas.getContext('2d'), w = L.canvas.width, h = L.canvas.height;
-  if(!w || !h) return;
-  var vh = h, vw = Math.min(w, Math.round(h * 9 / 16)), ox = Math.round((w - vw) / 2);  // 9:16 letterbox
-  var t = ts / 1000, cfg = L.clip.cfg;
-  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-  var bg = g.createLinearGradient(ox, 0, ox + vw, vh);
-  bg.addColorStop(0, 'hsl(' + ((cfg.h1 + t * 10) % 360) + ' 65% 45%)');
-  bg.addColorStop(1, 'hsl(' + ((cfg.h2 + t * 10) % 360) + ' 70% 22%)');
-  g.fillStyle = bg; g.fillRect(ox, 0, vw, vh);
-  var bx = ox + vw / 2 + Math.sin(t * 0.7) * vw * 0.25, by = vh / 2 + Math.cos(t * 0.9) * vh * 0.2;
-  var r = Math.min(vw, vh) * 0.30;
-  var rg = g.createRadialGradient(bx, by, r * 0.05, bx, by, r);
-  rg.addColorStop(0, 'rgba(255,255,255,.8)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = rg; g.beginPath(); g.arc(bx, by, r, 0, Math.PI * 2); g.fill();
-  var bx2 = ox + vw * 0.22 + Math.cos(t * 0.5) * vw * 0.12, by2 = vh * 0.24 + Math.sin(t * 0.8) * vh * 0.1;
-  var r2 = Math.min(vw, vh) * 0.16;
-  var rg2 = g.createRadialGradient(bx2, by2, r2 * 0.05, bx2, by2, r2);
-  rg2.addColorStop(0, 'rgba(0,0,0,.35)'); rg2.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = rg2; g.beginPath(); g.arc(bx2, by2, r2, 0, Math.PI * 2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,.95)'; g.textAlign = 'center';
-  g.font = 'bold ' + Math.max(14, Math.round(vh * 0.04)) + 'px system-ui, sans-serif';
-  g.fillText(L.clip.caption, ox + vw / 2, vh * 0.9);
-}
-function fakeLoop(ts){
-  if(!videoOpen || !curClip || curClip.kind !== 'fake' || sliding) return;
-  drawFake(ts, layers[activeL]);
-  requestAnimationFrame(fakeLoop);
-}
-function prepareLayer(L, clip){
-  L.clip = clip;
-  if(clip.kind === 'file'){
-    L.canvas.style.display = 'none'; L.video.style.display = 'block';
-    L.video.src = clip.src;
-    L.video.play().catch(function(){ /* autoplay blocked — ignore (muted default prevents this) */ });
+
+/* ---- Players and per-mode dispatch ---- */
+var P = null, PL = null, PR = null;   // main (modes 1/2) · left · right
+
+function activateContainers(){
+  if(S.mode === '3'){
+    PL = makePlayer(panelBoxL, 'left');  PL.startIdx = 0;
+    PR = makePlayer(panelBoxR, 'right'); PR.startIdx = Math.floor(order.length / 2);
+    PL.build(); PR.build();
+    if(S.poptrigger === 'auto'){
+      PL.onEnded = function(){ closePop(PL); };   // auto popups vanish when the clip ends
+      PR.onEnded = function(){ closePop(PR); };
+    }
   } else {
-    L.video.pause(); L.video.removeAttribute('src'); L.video.load();
-    L.video.style.display = 'none'; L.canvas.style.display = 'block';
-    drawFake(performance.now(), L);
+    P = makePlayer(S.mode === '1' ? panelBox : fsBox, S.mode === '1' ? 'panel' : 'fullscreen');
+    P.build();
   }
-}
-function showClip(clip, withSlide){
-  curClip = clip;
-  updateDecor();
-  if(!withSlide){
-    prepareLayer(layers[activeL], clip);   // first clip: appear in place, no motion
-    return;
-  }
-  var L = layers[1 - activeL];
-  prepareLayer(L, clip);
-  sliding = true;
-  L.el.style.transform = 'translateY(0)';                    // incoming rises from below
-  layers[activeL].el.style.transform = 'translateY(-100%)';  // outgoing exits upward
-  slideTimer = setTimeout(function(){ completeSlide(false); }, 320);
-}
-function completeSlide(snap){
-  if(!sliding) return;
-  sliding = false;
-  var inL = layers[1 - activeL], outL = layers[activeL];
-  outL.video.pause();
-  if(snap){
-    inL.el.style.transition = 'none';
-    inL.el.style.transform = 'translateY(0)';
-    void inL.el.offsetWidth;
-    inL.el.style.transition = '';
-  }
-  outL.el.style.transition = 'none';
-  outL.el.style.transform = 'translateY(100%)';   // park below (clipped by overflow)
-  void outL.el.offsetWidth;
-  outL.el.style.transition = '';
-  activeL = 1 - activeL;                          // incoming becomes the active layer
-  if(!videoOpen) return;
-  if(curClip.kind === 'fake') requestAnimationFrame(fakeLoop);
-  if(inL.video.error) nextClip();                 // incoming failed to load — skip ahead
-}
-function nextClip(){
-  if(!clipList.length) return;
-  if(sliding){ clearTimeout(slideTimer); completeSlide(true); }   // finish current motion instantly
-  curIdx = (curIdx + 1) % order.length;
-  log('video_next', null, clipList[order[curIdx]].name);
-  showClip(clipList[order[curIdx]], true);
 }
 function openVideo(){
-  videoOpen = true;
   if(S.mode === '1') runBody.classList.add('panel-open');
   else {
     fullscreen.classList.remove('hidden');
@@ -691,24 +822,47 @@ function openVideo(){
       else if(!warnedPause){ log('warn_task_pause_unsupported', null, null, 'Task page did not report ready; fell back to hidden-continue'); warnedPause = true; }
     }
   }
-  if(!curClip){ curIdx = 0; log('video_next', null, clipList[order[curIdx]].name); showClip(clipList[order[curIdx]], false); }
-  log('video_open', null, curClip.name);
-  if(curClip.kind === 'file') layers[activeL].video.play().catch(function(){});
-  else requestAnimationFrame(fakeLoop);   // placeholder clips: resume drawing on reopen
+  P.openPanel();
 }
 function closeVideo(){
-  if(!videoOpen) return;
-  log('video_close', null, curClip ? curClip.name : '');
-  videoOpen = false;
+  if(!P.open) return;
   if(S.mode === '1') runBody.classList.remove('panel-open');
   else {
     fullscreen.classList.remove('open');         // slide out first…
-    setTimeout(function(){ if(!videoOpen) fullscreen.classList.add('hidden'); }, 320);
+    setTimeout(function(){ if(!P.open) fullscreen.classList.add('hidden'); }, 320);
     if(S.mode2task === 'pause' && taskReady) postToTask('resume');
   }
-  layers.forEach(function(L){ L.video.pause(); });
+  P.closePanel();
 }
-function toggleVideo(){ videoOpen ? closeVideo() : openVideo(); }
+function toggleVideo(){ P.open ? closeVideo() : openVideo(); }
+function openPop(p){
+  if(p === PL){ runBody.classList.add('pop-left'); popL.classList.add('open'); }
+  else { runBody.classList.add('pop-right'); popR.classList.add('open'); }
+  p.openPanel();
+}
+function closePop(p){
+  if(p === PL){ runBody.classList.remove('pop-left'); popL.classList.remove('open'); }
+  else { runBody.classList.remove('pop-right'); popR.classList.remove('open'); }
+  p.closePanel();
+}
+function togglePop(){
+  if(PL.open || PR.open){
+    if(PL.open) closePop(PL);
+    if(PR.open) closePop(PR);
+  } else {
+    var side = S.popside === 'random' ? (Math.random() < 0.5 ? 'left' : 'right') : S.popside;
+    if(side === 'both'){ openPop(PL); openPop(PR); }
+    else openPop(side === 'left' ? PL : PR);
+  }
+}
+function popAuto(){
+  if(PL.open) closePop(PL);
+  if(PR.open) closePop(PR);
+  var side = S.popside === 'random' ? (Math.random() < 0.5 ? 'left' : 'right') : S.popside;
+  log('popup_auto', null, side);
+  if(side === 'both'){ openPop(PL); openPop(PR); }
+  else openPop(side === 'left' ? PL : PR);
+}
 
 /* ================= Task placeholder area ================= */
 function placeholderHTML(){
@@ -734,8 +888,19 @@ function placeholderHTML(){
     '<\/scr' + 'ipt></body></html>'
   );
 }
+function toEmbedUrl(url){
+  // watch?v= / youtu.be / shorts / embed links → official embed player
+  var m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if(!m) return url;   // not a recognizable YouTube link — use as-is
+  return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1&mute=1&loop=1&playlist=' + m[1] + '&rel=0&playsinline=1';
+}
 function setupTaskArea(){
-  if(S.tasksrc){
+  centerVideo.classList.add('hidden');
+  if(S.mode === '3' && S.centervideo){
+    centerVideo.src = toEmbedUrl(S.centervideo);
+    centerVideo.classList.remove('hidden');
+    taskFrame.classList.add('hidden');
+  } else if(S.tasksrc){
     taskFrame.removeAttribute('srcdoc');
     taskFrame.src = S.tasksrc;
     taskFrame.classList.remove('hidden');
@@ -774,8 +939,17 @@ window.addEventListener('keydown', function(e){
   }
   log('key', k, null, e.repeat ? 'repeat' : 'press');
   if(e.repeat) return;
-  if(k === S.keya.toLowerCase()) toggleVideo();
-  else if(k === S.keyb.toLowerCase()){ if(videoOpen) nextClip(); }
+  if(k === S.keya.toLowerCase()){
+    if(S.mode === '3') togglePop();
+    else toggleVideo();
+  }
+  else if(k === S.keyb.toLowerCase()){
+    if(S.mode === '3'){
+      if(PL && PL.open) PL.next();
+      if(PR && PR.open) PR.next();
+    }
+    else if(P && P.open) P.next();
+  }
   else if(k === 'escape') endRun('abort');
   else postToTask('key', { key: k });
 });
@@ -795,7 +969,11 @@ function readSettings(){
     keyb: ($('f_keyb').value.trim() || 'b').toLowerCase(),
     decor: $('f_decor').checked,
     subject: $('f_subject').value.trim() || 'P01',
-    note: $('f_note').value.trim()
+    note: $('f_note').value.trim(),
+    popside: $('f_popsid').value,
+    poptrigger: $('f_poptrigger').value,
+    popinterval: Math.max(2, parseFloat($('f_popinterval').value) || 10),
+    centervideo: $('f_centervideo').value.trim()
   };
 }
 function saveSettings(){ try { localStorage.setItem('fmri-video-task-settings', JSON.stringify(S)); } catch(e){} }
@@ -809,18 +987,23 @@ function loadSettings(){
   $('f_trigger').value = d.trigger; $('f_triggerkey').value = d.triggerkey;
   $('f_keya').value = d.keya; $('f_keyb').value = d.keyb;
   $('f_decor').checked = d.decor; $('f_subject').value = d.subject; $('f_note').value = d.note;
+  $('f_popsid').value = d.popside; $('f_poptrigger').value = d.poptrigger;
+  $('f_popinterval').value = d.popinterval; $('f_centervideo').value = d.centervideo;
 }
 function startRun(){
   readSettings();
   saveSettings();
-  rows = []; t0 = null; videoOpen = false; taskReady = false; warnedPause = false;
+  rows = []; t0 = null; taskReady = false; warnedPause = false;
   buildClipList();
   $('settingsScreen').classList.add('hidden');
   $('runScreen').classList.remove('hidden');
   $('endScreen').classList.add('hidden');
   runBody.classList.remove('panel-open');
+  runBody.classList.remove('pop-left'); runBody.classList.remove('pop-right');
+  popL.classList.remove('open'); popR.classList.remove('open');
   fullscreen.classList.add('hidden'); fullscreen.classList.remove('open');
-  activateContainer();
+  clearInterval(popIntervalTimer);
+  activateContainers();
   setupTaskArea();
   window.focus();
   if(S.trigger === 'immediate'){
@@ -838,7 +1021,11 @@ function beginRun(){
   log('session_start', null, null, 'mode=' + S.mode + ' mode2task=' + S.mode2task +
       ' videosource=' + S.videosource + ' durationMin=' + S.durationMin +
       ' sound=' + S.sound + ' decor=' + S.decor + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
-      ' note=' + S.note);
+      ' popside=' + S.popside + ' poptrigger=' + S.poptrigger +
+      ' centervideo=' + (S.centervideo || '(none)') + ' note=' + S.note);
+  if(S.mode === '3' && S.poptrigger === 'auto'){
+    popIntervalTimer = setInterval(function(){ if(runActive) popAuto(); }, S.popinterval * 1000);
+  }
   runTimer = setTimeout(function(){ endRun('timeout'); }, S.durationMin * 60000);
 }
 function computeStats(){
@@ -860,7 +1047,12 @@ function endRun(reason){
   if(!runActive) return;
   runActive = false;
   clearTimeout(runTimer);
-  if(videoOpen) closeVideo();
+  clearInterval(popIntervalTimer);
+  if(S.mode === '3'){
+    if(PL && PL.open) closePop(PL);
+    if(PR && PR.open) closePop(PR);
+  }
+  else if(P && P.open) closeVideo();
   log('run_end', null, reason || 'timeout');
   postToTask('resume');
   var s = computeStats();
