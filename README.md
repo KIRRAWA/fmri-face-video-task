@@ -67,8 +67,10 @@ Panel width = CSS variable `--panel-w` (in `:root` of index.html, default 34%).
 
 ### Mode 3 · Center task + random pop-ups (lab meeting design 4)
 
-The task runs **centered**; videos **pop up from the left or right**, squeezing the
-task area to the other side. Both panels can be open at once (one per side).
+The task (or center video) sits in a **fixed centered stage** surrounded by a
+black border whose side strips are exactly one reel wide; videos **pop in from
+the left or right** and fill that strip — the center stage never moves or
+resizes. Both panels can be open at once (one per side).
 
 | Setting | Options |
 |---|---|
@@ -299,7 +301,7 @@ fmri-face-video-task/
 
 ### 模式 3 · 任务居中 + 左右随机弹出（lab meeting 设计 4）
 
-任务**居中**显示，视频从**左侧或右侧弹出**，把任务区挤向另一边；两侧面板可以同时打开（每侧一个）。
+任务（或中央视频）位于**固定尺寸的居中舞台**中，四周是黑边，左右两条黑边宽度正好等于一条 reel 的宽度；视频从**左侧或右侧滑入**并恰好填满黑边——中央舞台不会移动或缩放；两侧面板可以同时打开（每侧一个）。
 
 | 设置 | 选项 |
 |---|---|

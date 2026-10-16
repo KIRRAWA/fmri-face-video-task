@@ -63,14 +63,37 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 #fullscreen.open { transform: none; }
 #fsBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 
-/* Mode 3: task centered, short videos pop in from the left and/or right */
+/* Mode 3: fixed centered stage with a black border ring. The two side strips
+   are exactly one reel wide and the stage is exactly as tall as a reel, so a
+   reel that pops in fills the strip without ever moving or resizing the
+   center video. Derivation: with reel width x, the 16:9 stage is (100vw-2x)
+   wide and 9/16·(100vw-2x) tall; a 9:16 reel of width x is 16/9·x tall.
+   Equal heights: 16/9·x = 9/16·(100vw-2x) → x = 100vw / (2 + 256/81) ≈ 19.38vw. */
+#runBody.mode3 { --reel-w: 19.38vw; }
+#runBody.mode3 #taskArea {
+  inset: auto;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(100vw - 2 * var(--reel-w));
+  height: min(calc((100vw - 2 * var(--reel-w)) * 9 / 16), 100vh);
+  transition: none;
+}
 #panelLeft, #panelRight { position: absolute; top: 0; bottom: 0; width: var(--panel-w); background: #000; z-index: 10; }
 #panelLeft { left: 0; transform: translateX(-105%); transition: transform .3s ease; }
 #panelRight { right: 0; transform: translateX(105%); transition: transform .3s ease; }
 #panelLeft.open, #panelRight.open { transform: none; }
 #panelLeft .panelBox, #panelRight .panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-#runBody.pop-left #taskArea { margin-left: var(--panel-w); }
-#runBody.pop-right #taskArea { margin-right: var(--panel-w); }
+/* Mode 3: panels sit in the side strips (same size as the stage, vertically
+   centered with it) and slide in over the black border instead of squeezing
+   the task area. */
+#runBody.mode3 #panelLeft, #runBody.mode3 #panelRight {
+  top: 50%; bottom: auto;
+  width: var(--reel-w);
+  height: min(calc((100vw - 2 * var(--reel-w)) * 9 / 16), 100vh);
+}
+#runBody.mode3 #panelLeft { transform: translate(-105%, -50%); }
+#runBody.mode3 #panelRight { transform: translate(105%, -50%); }
+#runBody.mode3 #panelLeft.open, #runBody.mode3 #panelRight.open { transform: translateY(-50%); }
 #centerVideo, #centerVideoEl { width: 100%; height: 100%; border: none; display: block; background: #000; }
 #centerVideoEl { object-fit: contain; }
 
@@ -838,13 +861,13 @@ function closeVideo(){
 }
 function toggleVideo(){ P.open ? closeVideo() : openVideo(); }
 function openPop(p){
-  if(p === PL){ runBody.classList.add('pop-left'); popL.classList.add('open'); }
-  else { runBody.classList.add('pop-right'); popR.classList.add('open'); }
+  if(p === PL) popL.classList.add('open');
+  else popR.classList.add('open');
   p.openPanel();
 }
 function closePop(p){
-  if(p === PL){ runBody.classList.remove('pop-left'); popL.classList.remove('open'); }
-  else { runBody.classList.remove('pop-right'); popR.classList.remove('open'); }
+  if(p === PL) popL.classList.remove('open');
+  else popR.classList.remove('open');
   p.closePanel();
 }
 function togglePop(){
@@ -1015,7 +1038,7 @@ function startRun(){
   $('runScreen').classList.remove('hidden');
   $('endScreen').classList.add('hidden');
   runBody.classList.remove('panel-open');
-  runBody.classList.remove('pop-left'); runBody.classList.remove('pop-right');
+  runBody.classList.toggle('mode3', S.mode === '3');
   popL.classList.remove('open'); popR.classList.remove('open');
   fullscreen.classList.add('hidden'); fullscreen.classList.remove('open');
   clearInterval(popIntervalTimer);
