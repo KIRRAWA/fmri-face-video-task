@@ -6,6 +6,11 @@ videos/*.m4v
 # Mode 3 center task video (downloaded for offline runs)
 center/
 
+# Instagram cold-account collector (Plan A): login session + captured data
+ig_profile/
+videos/*.jsonl
+videos/ig_downloaded.txt
+
 # yt-dlp download state (machine-specific)
 videos/downloaded.txt
 
