@@ -9,12 +9,43 @@ fmri-face-video-task/
   generate_manifest.py    # scans videos/ and generates the video manifest
   get_authors.py          # rebuilds videos/authors.json (per-video author metadata)
   download_videos.py      # optional batch auto-downloader (yt-dlp wrapper)
+  ig_collector.py         # Instagram cold-account collector (Plan A: scroll + links/labels)
   videos/
     manifest.js           # video manifest (auto-generated)
     authors.json          # per-video author metadata (auto-generated)
     *.mp4                 # lab-provided short videos (optional)
   README.md
 ```
+
+## Instagram cold-account collector (Plan A)
+
+`ig_collector.py` auto-scrolls the Reels feed on a fresh, deliberately inert
+Instagram account and captures every reel's link + labels (caption hashtags,
+music track, author, video URLs) from the JSON the page loads — no API, no
+DOM scraping.
+
+**Cold-account rules** (so the algorithm learns nothing about taste): no
+likes/follows/comments/profile visits; fixed dwell per reel (only
+content-independent jitter); skip all interest prompts at signup.
+
+```
+pip install playwright          # uses your installed Edge, no browser download
+python3 ig_collector.py --login # one-time manual login (session saved in ig_profile/)
+python3 ig_collector.py --reels 100 --dwell 5   # collect
+python3 ig_collector.py --reels 100 --download  # collect + download
+python3 ig_collector.py --download-only         # download the pool later
+```
+
+Output: `videos/ig_captured.jsonl` — one JSON per reel (shortcode, url,
+username, caption, hashtags, music, taken_at, media_urls, alt text).
+Downloads go to `videos/ig_*.mp4` (yt-dlp reuses the session via
+`ig_profile/cookies.txt`). `--account-categories` adds each author's business
+category + followers, at the cost of profile lookups (a mild preference
+signal — off by default).
+
+Caveat: the cold feed is the algorithm's *default prior* (popularity-biased),
+not a uniform sample of Instagram content — see the lab notes on sampling
+frames (Plan B: uniform hashtag sampling) for an unbiased pool.
 
 ## Quick start
 
