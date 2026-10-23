@@ -1,19 +1,28 @@
-# fMRI · Face Task + Short-Form Video Browsing (Dual-Mode Template)
+# fMRI · Face Task + Short-Form Video Browsing
 
-Subjects perform a boring face-recognition task in the scanner while voluntarily browsing short-form videos.
-**Key A** = open/close the video, **Key B** = next video. Three video modes, chosen by the experimenter before the run.
+A documentary plays in a **fixed centered stage** while short-form videos
+(Instagram reels) **pop in from the left or right** on demand. Subjects do the
+face task in the scanner and browse reels voluntarily. **Key A** = open/close
+the pop-up, **Key B** = next reel. Saturation and volume are freely adjustable
+per content type (documentary vs. reels) with sliders.
 
 ```
 fmri-face-video-task/
   index.html              # main page (single file, double-click to open, works offline)
+  task.py                 # local server + full CLI control (folder import, auto-start runs)
+  CLI-GUIDE.md            # English walkthrough of the command-line workflow
   generate_manifest.py    # scans videos/ and generates the video manifest
   get_authors.py          # rebuilds videos/authors.json (per-video author metadata)
   download_videos.py      # optional batch auto-downloader (yt-dlp wrapper)
   ig_collector.py         # Instagram cold-account collector (Plan A: scroll + links/labels)
+  center/
+    center.mp4            # shipped center documentary (plays offline)
   videos/
     manifest.js           # video manifest (auto-generated)
     authors.json          # per-video author metadata (auto-generated)
     *.mp4                 # lab-provided short videos (optional)
+  config.json / config.js # created by task.py (machine-specific, gitignored)
+  data/                   # server-side run archives (gitignored)
   README.md
 ```
 
@@ -38,34 +47,31 @@ python3 ig_collector.py --download-only         # download the pool later
 
 Output: `videos/ig_captured.jsonl` — one JSON per reel (shortcode, url,
 username, caption, hashtags, music, taken_at, media_urls, alt text).
-Downloads go to `videos/ig_*.mp4` (yt-dlp reuses the session via
-`ig_profile/cookies.txt`). `--account-categories` adds each author's business
-category + followers, at the cost of profile lookups (a mild preference
-signal — off by default).
 
-Caveat: the cold feed is the algorithm's *default prior* (popularity-biased),
-not a uniform sample of Instagram content — see the lab notes on sampling
-frames (Plan B: uniform hashtag sampling) for an unbiased pool.
-
-## Quick start
+## Quick start (browser mode)
 
 1. Open `index.html` in Chrome (double-click — no server, no network needed)
-2. On the settings page, pick a mode and parameters → **Fullscreen** → **Start experiment**
+2. Adjust the settings: center video, pop-up side / left-side chance,
+   saturation & volume sliders, run duration → **Fullscreen** → **Start experiment**
 3. (Trigger mode) The screen stays black until the trigger key (default `5`)
 4. When the run ends, statistics are shown and the CSV is downloaded automatically
 
-## Three video modes
+## Quick start (server + CLI mode)
 
-| | Mode 1 · Slide-in panel | Mode 2 · Full-page switch |
-|---|---|---|
-| Press A | A vertical (9:16) video panel slides in from the right; the task area shifts left and **keeps running in parallel** | The whole page switches to the video feed; the task page is hidden |
-| Press B | Next video | Next video |
-| Press A again | Panel collapses, task area restored | Back to the task page |
-| Mode 2 task behavior | — | Setting: **keep running hidden** (default) / **pause via message** (needs task-page support) |
+`task.py` (Python 3, stdlib only) adds folder scanning to the settings page
+and lets the whole experiment be launched from the command line:
 
-Panel width = CSS variable `--panel-w` (in `:root` of index.html, default 34%).
+```bash
+python3 task.py serve                       # server + the normal settings page
+python3 task.py run --subject P01 --duration 10 --trigger immediate \
+    --left-pct 50 --sat-center 100 --vol-center 0 --sat-reel 100 --vol-reel 0
+#   -> one fully-configured run, no clicks at all
+```
 
-### Mode 3 · Center task + random pop-ups (lab meeting design 4)
+See **CLI-GUIDE.md** for the complete command reference and the reel-crawler
+import workflow.
+
+## Layout & pop-ups
 
 The task (or center video) sits in a **fixed centered stage** surrounded by a
 black border whose side strips are exactly one reel wide; videos **pop in from
@@ -75,37 +81,39 @@ resizes. Both panels can be open at once (one per side).
 | Setting | Options |
 |---|---|
 | Pop-up side | **Random** (default) / both / left only / right only |
+| Left-side chance (%) | Random mode only: % of pop-ups that open on the **left** (right = 100 − this) |
 | Pop-up trigger | **Manual** (A opens/closes a pop-up — "internally generated" browsing) / **Auto** (a pop-up opens on its own every N seconds and closes when its clip ends — "externally probed") |
 | Pop-up interval | Auto mode only: seconds between auto pop-ups |
-| Center video | URL of the task video shown centered (YouTube links auto-convert to embeds; local/remote video files play in a built-in player). Defaults to `center/center.mp4`, a local clip that works offline — YouTube needs internet |
+| Center video | URL of the documentary shown centered (YouTube links auto-convert to embeds; local/remote video files play in a built-in player). Defaults to `center/center.mp4`, a local clip that works offline — YouTube needs internet |
 
-Key mapping in Mode 3: **A** = pop up / close (per the side setting; "both" opens both),
+Key mapping: **A** = pop up / close (per the side setting; "both" opens both),
 **B** = next clip in every open panel.
-
-Every video shows its **@author label bottom-left** (plus the caption, when available) —
-see "Author metadata" below.
 
 ## Settings
 
 | Setting | Description |
 |---|---|
-| Video mode | Mode 1 / Mode 2 / Mode 3 |
-| Task behavior in Mode 2 | Keep running hidden / Pause via message (falls back to hidden + logged warning if the task page doesn't support it) |
-| Mode 3 pop-up side | Random / both / left only / right only |
-| Mode 3 pop-up trigger | Manual (A opens/closes) / Auto (opens every N seconds, closes when the clip ends) |
+| Pop-up side | Random / both / left only / right only |
+| Left-side chance (%) | Random mode only: left-side probability (0-100, default 50) |
+| Pop-up trigger | Manual (A opens/closes) / Auto (opens every N seconds, closes when the clip ends) |
 | Pop-up interval | Auto mode only: seconds between auto pop-ups |
-| Center video | Task video URL shown centered (YouTube links auto-converted to embeds; empty = built-in placeholder task). YouTube needs internet — use a local file for offline runs |
+| Center video | Documentary URL shown centered (YouTube links auto-converted to embeds; empty = built-in placeholder task). YouTube needs internet — use a local file for offline runs |
+| Center saturation | Slider 0-200% for the documentary (0% = black & white) |
+| Center volume | Slider 0-100% (local files only; YouTube embeds stay muted) |
+| Reel saturation | Slider 0-200% for the pop-up reels (0% = black & white) |
+| Reel volume | Slider 0-100% (0 = muted — also the browser-autoplay-safe default) |
 | Video source | Auto / real videos only / placeholder clips only (debugging) |
 | Run duration | Minutes, decimals allowed |
 | Task page | Path to the face-task page (empty = built-in placeholder task). **Filling this in is the "integration"** |
 | Start mode | Wait for trigger key (black screen — for scanner pulse) / start immediately |
 | Trigger key | Default `5`; scanner pulse boxes usually map to 5 or t |
 | Keys A / B | Remappable (button boxes send standard key codes, same as a keyboard) |
-| Sound | Muted by default (scanner rooms are loud; use MR-compatible headphones if enabled) |
-| TikTok-style decorations | Like column / user info on placeholder clips only; **real videos show their @author label bottom-left** (+ caption when available; progress bar always shown) |
+| Instagram-style decorations | Like count / @author on the reels. Placeholder clips show simulated values; **real videos show their real @author bottom-left and their real like count Instagram-style on the right side** (progress bar always shown) |
 | Subject ID / Note | Written into the CSV |
+| Video folders | Register real folder paths and import a pool from anywhere on disk (server mode only) |
 
-Settings are remembered automatically (localStorage).
+Settings are remembered automatically (localStorage); CLI settings from
+`task.py` (`config.js`) override them while present.
 
 ## Video pool
 
@@ -116,10 +124,27 @@ Settings are remembered automatically (localStorage).
 Playback rules: randomized order, no immediate repeats, endless looping, B advances clip by clip — mimics a live feed.
 Copyright note: real videos for the study must be provided by the lab (own account content or licensed content). This template ships no real videos — the placeholder clips are animated, not real.
 
+### Video folders (import a pool from the collector)
+
+The **Video folders** card (server mode) mirrors real folders on disk:
+
+1. Register a folder path (e.g. the reel-crawler's `review_videos/` output)
+2. Scan finds the videos inside; **Import** makes it the active pool
+3. Nothing is copied — `task.py` serves the files from their real location
+   and rewrites `videos/manifest.js` with `/media/...` URLs
+
+Importing also pulls **author name + like count** for every reel whose file
+name (the Instagram shortcode) matches local metadata — from `pool.json`
+(review-team merged pool), `feed_collection.sqlite` (crawler stores),
+`review_frames/<code>/meta.json`, `authors.json`, or CSV exports. The like
+count is displayed Instagram-style (e.g. `45.1K`) **on the right side of the
+screen**, and author + likes are written into the CSV (`video_next` rows).
+Files without metadata still play — they show `@unknown` and no like count.
+
 ### Author metadata (the @author label)
 
 Every pool video shows **@author** bottom-left. Metadata lives in `videos/authors.json`
-(video id → `{author, nick, desc}`), which `generate_manifest.py` bakes into the manifest.
+(video id → `{author, nick, desc, likes?}`), which `generate_manifest.py` bakes into the manifest.
 It is filled automatically:
 
 - `download_videos.py` records the author for every video it downloads (feed crawls also capture the caption);
@@ -154,8 +179,8 @@ Use your own account's content or licensed material, per lab/IRB policy.
 
 | Key | Action |
 |---|---|
-| A (remappable) | Open / close the video (Mode 3: pop up / close, per the side setting) |
-| B (remappable) | Next video (Mode 3: next clip in every open panel) |
+| A (remappable) | Open / close the pop-up video (per the side setting) |
+| B (remappable) | Next reel in every open panel |
 | 1 / 2 | Forwarded to the task page (face-task responses) |
 | Trigger (default 5) | Start the run from the black screen |
 | Esc | End the run early (logged) |
@@ -169,27 +194,28 @@ The settings page has an **EN / 中文** toggle at the top right; the choice is 
 
 ## Subject instructions (what the subject does)
 
-During the run the subject performs the face task. At any moment they can:
+A documentary plays in the center of the screen during the whole run. At any moment the subject can:
 
-- press **A** to open the video — Mode 1: a vertical panel slides in from the right while the task keeps running; Mode 2: the whole page switches to the video; Mode 3: a video pops up from the left or right (or both) while the task stays centered — and in auto mode pop-ups can also appear on their own
+- press **A** to pop a short video up on the left or right (or both) — in auto mode pop-ups can also appear on their own
 - press **B** to go to the next video
-- press **A** again to close the video and return to the task
+- press **A** again to close the pop-ups and return to the task
 
 That is the entire video interaction — no mouse, no other keys. Whether and how long they browse is entirely up to them. Task responses use keys 1 / 2. The same instructions are available on the settings page under "Subject instructions (show before the run)".
 
 ## Data logging
 
-Every event is one CSV row with millisecond timestamps (t=0 is the trigger/start moment); downloaded automatically at the end:
+Every event is one CSV row with millisecond timestamps (t=0 is the trigger/start moment); downloaded automatically at the end (and also archived server-side in `data/` when running through `task.py`):
 
 `t_ms, subject, type, key, value, note`
 
 | type | Meaning |
 |---|---|
-| session_start | Run start (note contains full config) |
+| session_start | Run start (note contains full config incl. saturations, volumes, left-side chance) |
 | trigger | Scanner trigger received |
 | key | Every key this page receives (note: press/repeat) |
+| popup_manual / popup_auto | A pop-up opened (value = side) |
 | video_open / video_close | Video opened/closed (value = clip name) |
-| video_next | B pressed, next clip (value = clip name) |
+| video_next | B pressed, next clip (note: author + likes of the new clip) |
 | video_play / video_error | Clip loaded successfully / failed |
 | task_event | Events reported by the task page (value = event type, note = JSON) |
 | task_ready / warn_* | Integration status and warnings |
@@ -213,11 +239,8 @@ window.addEventListener('message', function(ev){
   if(m.type === 'key') {
     // equivalent to the old keydown event: m.key is "1", "2", etc.
     handleTaskKey(m.key);
-  } else if(m.type === 'pause') {
-    // optional: pause timing and trial presentation (Mode 2, video open)
-    pauseTask();
   } else if(m.type === 'resume') {
-    // optional: resume
+    // optional: the run has ended (sent when the end screen appears)
     resumeTask();
   }
 });
@@ -227,7 +250,7 @@ function report(event){  // any fields, e.g. {type:'trial', trial:3, rt:412, cor
   window.parent.postMessage({source:'task', type:'event', event: event}, '*');
 }
 
-// 4. Optional: send on load (required for Mode 2 "Pause" support)
+// 4. Optional: announce readiness on load
 window.parent.postMessage({source:'task', type:'ready'}, '*');
 </script>
 ```
@@ -237,8 +260,7 @@ window.parent.postMessage({source:'task', type:'ready'}, '*');
 | Direction | Message | Description |
 |---|---|---|
 | Template → task | `{source:'fmri-video', type:'key', key}` | Forwarded key (the task page's response keys) |
-| Template → task | `{source:'fmri-video', type:'pause'}` | Pause the task while Mode 2 video is open (only when the setting is "Pause") |
-| Template → task | `{source:'fmri-video', type:'resume'}` | Resume |
+| Template → task | `{source:'fmri-video', type:'resume'}` | The run ended (end screen shown) |
 | Task → template | `{source:'task', type:'ready'}` | Task page loaded |
 | Task → template | `{source:'task', type:'event', event:{...}}` | Trial events, logged into the CSV as-is |
 
@@ -249,7 +271,8 @@ The built-in placeholder task (settings left empty) is written against exactly t
 - [ ] Open index.html in Chrome/Edge; F11 or the **Fullscreen** button
 - [ ] Disable system notifications / update popups; enable Do Not Disturb
 - [ ] Confirm button-box key codes → fill in A / B / trigger key on the settings page
-- [ ] Video is muted by default; if sound is needed, connect MR headphones and tick "Play sound"
+- [ ] Set the saturation / volume sliders for the documentary and the reels (both default to muted — enable volume only with MR-compatible headphones)
+- [ ] Choose the left/right pop-up chance for this protocol
 - [ ] Run one full pilot session (including the CSV download) and check the data before booking subjects
 - [ ] Screen brightness: `#taskArea` background is `#808080` (common projector gray), adjustable in the CSS
 
@@ -258,83 +281,111 @@ The built-in placeholder task (settings left empty) is written against exactly t
 - **Page says manifest not found / videos don't play** → make sure videos/manifest.js exists with correct paths; rerun `python3 generate_manifest.py`
 - **A video won't play** → transcode to H.264 + AAC MP4 (e.g. `ffmpeg -i in.mov -c:v libx264 -pix_fmt yuv420p -c:a aac out.mp4`)
 - **Changed videos but the page doesn't update** → rerun the script + refresh (Ctrl/Cmd+R)
-- **Why not embed live TikTok directly** → TikTok offers no third-party feed API, iframe embeds can't be key-controlled, and a network dependency is risky mid-scan; a pre-downloaded pool is the controllable alternative
-- **Mode 3 center video stays black** → YouTube embeds need internet; for offline scanner runs download the clip (e.g. `yt-dlp URL -o videos/center.mp4`) and enter its path instead, or leave it empty for the built-in placeholder task
-- **file:// limitations** → this template already works around them (manifest loads via a script tag instead of fetch); for HTTP: `python3 -m http.server` then visit `http://localhost:8000/`
+- **Why not embed live Instagram/TikTok directly** → no third-party feed API, iframe embeds can't be key-controlled, and a network dependency is risky mid-scan; a pre-downloaded pool is the controllable alternative
+- **Center video stays black** → YouTube embeds need internet; for offline scanner runs download the clip (e.g. `yt-dlp URL -o center/center.mp4`) and enter its path instead, or leave it empty for the built-in placeholder task
+- **Imported pool won't play** → imported pools are served as `/media/...` URLs by `task.py`; keep the server running (`python3 task.py serve`), or rerun `generate_manifest.py` to switch back to the built-in `videos/` pool
+- **file:// limitations** → this template works around most of them (manifests load via script tags); only folder scanning needs the server: `python3 task.py serve` then visit `http://127.0.0.1:8000/`
 
 ---
 
-# fMRI · 人脸任务 + 短视频浏览（双模式模板）
+# fMRI · 人脸任务 + 短视频浏览
 
-受试者在扫描仪内做枯燥的人脸识别任务，同时可自愿刷短视频。**A 键** = 开/关视频，**B 键** = 下一条视频。三种视频模式由科学家在实验前选择。
+一部纪录片在**固定尺寸的居中舞台**播放，短视频（Instagram reels）随时从**左侧或右侧弹出**。受试者在扫描仪内做人脸任务，刷不刷、刷多久完全自愿。**A 键** = 打开/关闭弹出视频，**B 键** = 下一条。纪录片与 reels 的**饱和度、音量**分别用滑杆自由调节。
 
 ```
 fmri-face-video-task/
   index.html              # 主页面（单文件，双击即开，离线可用）
+  task.py                 # 本地服务器 + 完整命令行控制（文件夹导入、免点击启动）
+  CLI-GUIDE.md            # 命令行工作流的英文指南
   generate_manifest.py    # 扫描 videos/ 生成视频清单
   get_authors.py          # 重建 videos/authors.json（逐条视频的作者信息）
   download_videos.py      # 可选批量下载器（yt-dlp 包装）
+  ig_collector.py         # Instagram 冷号采集器（Plan A：滚动 + 链接/标签）
+  center/
+    center.mp4            # 随附的中央纪录片（离线可播）
   videos/
     manifest.js           # 视频清单（自动生成）
     authors.json          # 逐条视频的作者信息（自动生成）
     *.mp4                 # 实验室自备的短视频（可选）
+  config.json / config.js # 由 task.py 生成（机器相关，已 gitignore）
+  data/                   # 服务端实验记录存档（已 gitignore）
   README.md
 ```
 
-## 快速开始
+## Instagram 冷号采集器（Plan A）
+
+`ig_collector.py` 在一个全新、刻意不互动的 Instagram 账号上自动滚动 Reels feed，并从页面加载的 JSON 里抓取每条 reel 的链接与标签（文案 hashtag、音乐、作者、视频地址）——无需 API、无需 DOM 解析。
+
+**冷号纪律**（让算法学不到任何口味）：不点赞、不关注、不评论、不点主页；每条 reel 固定停留（仅加与内容无关的抖动）；注册时跳过所有兴趣提示。
+
+```
+pip install playwright          # 使用本机 Edge，无需下载浏览器
+python3 ig_collector.py --login # 一次性手动登录（会话存于 ig_profile/）
+python3 ig_collector.py --reels 100 --dwell 5   # 采集
+python3 ig_collector.py --reels 100 --download  # 采集 + 下载
+python3 ig_collector.py --download-only         # 之后单独下载
+```
+
+输出：`videos/ig_captured.jsonl` —— 每条 reel 一行 JSON（shortcode、url、username、caption、hashtags、music、taken_at、media_urls、alt text）。
+
+## 快速开始（浏览器模式）
 
 1. Chrome 打开 `index.html`（双击即可，无需服务器、无需联网）
-2. 设置页选好模式与参数 → **全屏** → **开始实验**
+2. 设置页调好参数：中央视频、弹出方向/左侧概率、饱和度与音量滑杆、时长 → **全屏** → **开始实验**
 3. （触发模式）黑屏等待，按触发键（默认 `5`）开始
 4. 到时间自动结束 → 结束页显示统计并自动下载 CSV
 
-## 三种视频模式
+## 快速开始（服务器 + 命令行模式）
 
-| | 模式 1 · 侧滑面板 | 模式 2 · 整页切换 |
-|---|---|---|
-| 按 A | 右侧滑出竖屏(9:16)视频面板，任务区左移、任务**继续并行** | 整页切到视频流，任务页隐藏 |
-| 按 B | 下一条视频 | 下一条视频 |
-| 再按 A | 面板收起，任务区恢复 | 回到任务页 |
-| 模式 2 任务行为 | — | 设置项二选一：**隐藏继续**（默认）/ **消息暂停**（需任务页支持） |
+`task.py`（仅用 Python 3 标准库）给设置页加上文件夹扫描，并支持纯命令行启动实验：
 
-面板宽度 = CSS 变量 `--panel-w`（index.html 内 `:root`，默认 34%）。
+```bash
+python3 task.py serve                       # 服务器 + 常规设置页
+python3 task.py run --subject P01 --duration 10 --trigger immediate \
+    --left-pct 50 --sat-center 100 --vol-center 0 --sat-reel 100 --vol-reel 0
+#   -> 一次免点击的完整实验
+```
 
-### 模式 3 · 任务居中 + 左右随机弹出（lab meeting 设计 4）
+完整命令参考与 reel-crawler 导入流程见 **CLI-GUIDE.md**。
+
+## 布局与弹窗
 
 任务（或中央视频）位于**固定尺寸的居中舞台**中，四周是黑边，左右两条黑边宽度正好等于一条 reel 的宽度；视频从**左侧或右侧滑入**并恰好填满黑边——中央舞台不会移动或缩放；两侧面板可以同时打开（每侧一个）。
 
 | 设置 | 选项 |
 |---|---|
 | 弹出方向 | **随机**（默认）/ 两侧 / 仅左 / 仅右 |
+| 左侧出现概率（%） | 仅随机模式：弹出出现在**左侧**的百分比（右侧 = 100 − 此值） |
 | 弹出方式 | **手动**（按 A 开/关弹窗——「自发生成」式浏览）/ **自动**（每 N 秒自动弹出，视频播完自动收起——「外部探测」式） |
 | 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
-| 中央视频 | 居中显示的任务视频 URL（YouTube 链接自动转为嵌入；留空 = 内置占位任务）。**YouTube 需联网**——扫描间离线运行请先下载成文件、填本地路径 |
+| 中央视频 | 居中播放的纪录片 URL（YouTube 链接自动转为嵌入；本地/远程视频文件用内置播放器播放）。默认 `center/center.mp4`——本地片段，离线可用；YouTube 需联网 |
 
-模式 3 按键：**A** = 按方向设置弹出/收起（「两侧」则同时弹出两个），**B** = 每个打开的面板各换下一条。
-
-每条视频左下角显示 **@作者标签**（有文案时一并显示）——见下方「作者信息」。
+按键：**A** = 按方向设置弹出/收起（「两侧」则同时弹出两个），**B** = 每个打开的面板各换下一条。
 
 ## 设置项
 
 | 设置 | 说明 |
 |---|---|
-| 视频模式 | 模式 1 / 模式 2 / 模式 3 |
-| 模式 2 任务行为 | 隐藏继续 / 消息暂停（任务页不支持时自动退化并记入日志） |
-| 模式 3 弹出方向 | 随机 / 两侧 / 仅左 / 仅右 |
-| 模式 3 弹出方式 | 手动（按 A 开关）/ 自动（每 N 秒弹出、播完自动收起） |
+| 弹出方向 | 随机 / 两侧 / 仅左 / 仅右 |
+| 左侧出现概率（%） | 仅随机模式：左侧弹出概率（0-100，默认 50） |
+| 弹出方式 | 手动（按 A 开关）/ 自动（每 N 秒弹出、播完自动收起） |
 | 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
-| 中央视频 | 居中任务视频 URL（YouTube 自动转嵌入；本地/远程视频文件用内置播放器播放）。默认 `center/center.mp4`——本地片段，离线可用；YouTube 需联网 |
+| 中央视频 | 居中纪录片 URL（YouTube 自动转嵌入；留空 = 内置占位任务）。YouTube 需联网——扫描间离线请用本地文件 |
+| 中央饱和度 | 纪录片滑杆 0-200%（0% = 黑白） |
+| 中央音量 | 纪录片滑杆 0-100%（仅本地文件；YouTube 嵌入保持静音） |
+| Reel 饱和度 | 弹出 reels 滑杆 0-200%（0% = 黑白） |
+| Reel 音量 | 弹出 reels 滑杆 0-100%（0 = 静音，也是浏览器自动播放的安全默认） |
 | 视频来源 | 自动 / 仅真实视频 / 仅占位动画（调试） |
 | 实验时长 | 分钟，可小数 |
 | 任务页面 | 人脸任务页面路径（留空 = 内置占位任务）。**填这个就是「接入」** |
 | 开始方式 | 等待触发键（黑屏，适合扫描脉冲）/ 立即开始 |
 | 触发键 | 默认 `5`，按钮盒接 TTL 脉冲通常映射 5 或 t |
 | A / B 键 | 可改（按钮盒键码与键盘一致） |
-| 声音 | 默认静音（扫描间噪音大；开声需扫描间耳机） |
-| TikTok 装饰 | 点赞列 / 用户信息仅显示在占位动画上；**真实视频左下角显示 @作者标签**（有文案时一并显示；进度条始终显示） |
+| Instagram 装饰 | 点赞数 / @作者显示在 reels 上。占位动画为模拟数值；**真实视频左下角显示真实 @作者，屏幕右侧以 Instagram 样式显示真实点赞数**（进度条始终显示） |
 | 受试者编号 / 备注 | 写入 CSV |
+| 视频文件夹 | 注册真实文件夹路径、从磁盘任意位置导入视频池（仅服务器模式） |
 
-设置自动记忆（localStorage）。
+设置自动记忆（localStorage）；`task.py` 的命令行设置（config.js）存在时优先。
 
 ## 视频池
 
@@ -345,9 +396,19 @@ fmri-face-video-task/
 播放规则：随机排序、同条不连续、循环不到头，B 键逐条切换——模拟「实时推荐流」。
 版权提醒：正式实验视频由实验室自备（自己账号内容或获授权内容），本模板不内置任何真实视频——内置的是动画占位内容，不是真实视频。
 
+### 视频文件夹（从采集器导入视频池）
+
+**视频文件夹**卡片（服务器模式）与实际文件夹同步：
+
+1. 注册一个文件夹路径（如 reel-crawler 的 `review_videos/` 输出目录）
+2. 扫描会找到其中的视频；**导入**即设为当前视频池
+3. 不复制任何文件——`task.py` 直接从真实位置伺服这些文件，并重写 `videos/manifest.js` 为 `/media/...` 地址
+
+导入时还会为每条文件名（Instagram shortcode）能与本地元数据匹配上的 reel 拉取**作者名 + 点赞数**——元数据来自 `pool.json`（review-team 合并池）、`feed_collection.sqlite`（采集器存储）、`review_frames/<code>/meta.json`、`authors.json` 或 CSV 导出。点赞数以 Instagram 样式（如 `45.1K`）显示在**屏幕右侧**，作者与点赞数写入 CSV（`video_next` 行的 note 字段）。没有元数据的视频照常播放——显示 `@unknown`、不显示点赞数。
+
 ### 作者信息（@作者标签）
 
-池内每条视频左下角都显示 **@作者**。信息存在 `videos/authors.json`（视频 id → `{author, nick, desc}`），`generate_manifest.py` 会把它写进清单。自动填充：
+池内每条视频左下角都显示 **@作者**。信息存在 `videos/authors.json`（视频 id → `{author, nick, desc, likes?}`），`generate_manifest.py` 会把它写进清单。自动填充：
 
 - `download_videos.py` 下载时即记录每条视频的作者（feed 爬取还能拿到文案）；
 - `get_authors.py` 从头重建——先翻登录态 For You feed，未命中的再用 TikTok 嵌入页（`https://www.tiktok.com/embed/v2/{视频id}`，作者信息直接在 HTML 里）逐条补。
@@ -381,8 +442,8 @@ python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
 
 | 键 | 功能 |
 |---|---|
-| A（可改） | 开/关视频（模式 3：按方向设置弹出/收起） |
-| B（可改） | 下一条视频（模式 3：每个打开的面板各换下一条） |
+| A（可改） | 打开/关闭弹出视频（按方向设置） |
+| B（可改） | 每个打开的面板各换下一条 |
 | 1 / 2 | 转发给任务页（人脸任务作答） |
 | 触发键（默认 5） | 黑屏时开始实验 |
 | Esc | 提前结束（记入日志） |
@@ -396,27 +457,28 @@ python3 download_videos.py URL1 URL2 --count 30 --max-duration 60
 
 ## 被试说明（被试要做什么）
 
-实验中受试者做人脸任务，同时随时可以：
+实验全程一部纪录片在屏幕中央播放。受试者随时可以：
 
-- 按 **A** 打开视频——模式 1：右侧滑出竖屏面板，任务继续并行；模式 2：整页切到视频；模式 3：视频从左侧或右侧（或两侧同时）弹出，任务保持居中——自动模式下弹窗也会自己出现
+- 按 **A** 让短视频从左侧或右侧（或两侧同时）弹出——自动模式下弹窗也会自己出现
 - 按 **B** 看下一条视频
-- 再按 **A** 收起视频、回到任务
+- 再按 **A** 收起弹窗、回到任务
 
 这就是全部视频操作——不用鼠标、没有其他键。是否刷、刷多久完全自愿。任务作答用 1 / 2 键。同样内容在设置页「被试说明（实验前展示）」中可查。
 
 ## 数据记录
 
-所有事件一行一条，毫秒时间戳（t=0 为触发/开始时刻），结束自动下载 CSV：
+所有事件一行一条，毫秒时间戳（t=0 为触发/开始时刻），结束自动下载 CSV（经 `task.py` 运行时还会在服务器端存档到 `data/`）：
 
 `t_ms, subject, type, key, value, note`
 
 | type | 含义 |
 |---|---|
-| session_start | 开始（note 含全部配置） |
+| session_start | 开始（note 含全部配置：饱和度、音量、左侧概率等） |
 | trigger | 扫描触发 |
 | key | 本页收到的每个按键（note: press/repeat） |
+| popup_manual / popup_auto | 弹窗打开（value=侧别） |
 | video_open / video_close | 视频打开/关闭（value=视频名） |
-| video_next | B 键换下一条（value=视频名） |
+| video_next | B 键换下一条（note：新视频的作者与点赞数） |
 | video_play / video_error | 视频加载成功/失败 |
 | task_event | 任务页上报的事件（value=事件类型，note=JSON） |
 | task_ready / warn_* | 对接状态与警告 |
@@ -440,11 +502,8 @@ window.addEventListener('message', function(ev){
   if(m.type === 'key') {
     // 等价于原来的 keydown：m.key 为 "1"、"2" 等
     handleTaskKey(m.key);
-  } else if(m.type === 'pause') {
-    // 可选：暂停计时与出题（模式 2 视频打开期间）
-    pauseTask();
   } else if(m.type === 'resume') {
-    // 可选：恢复
+    // 可选：实验已结束（结束页出现时发送）
     resumeTask();
   }
 });
@@ -454,7 +513,7 @@ function report(event){  // 任意字段，如 {type:'trial', trial:3, rt:412, c
   window.parent.postMessage({source:'task', type:'event', event: event}, '*');
 }
 
-// 4. 可选：加载完成后发送（启用模式 2「暂停」功能的前提）
+// 4. 可选：加载完成后告知就绪
 window.parent.postMessage({source:'task', type:'ready'}, '*');
 </script>
 ```
@@ -464,8 +523,7 @@ window.parent.postMessage({source:'task', type:'ready'}, '*');
 | 方向 | 消息 | 说明 |
 |---|---|---|
 | 模板 → 任务 | `{source:'fmri-video', type:'key', key}` | 按键转发（任务页作答键） |
-| 模板 → 任务 | `{source:'fmri-video', type:'pause'}` | 模式 2 视频打开时暂停任务（仅当设置选「暂停」） |
-| 模板 → 任务 | `{source:'fmri-video', type:'resume'}` | 恢复 |
+| 模板 → 任务 | `{source:'fmri-video', type:'resume'}` | 实验结束（结束页显示） |
 | 任务 → 模板 | `{source:'task', type:'ready'}` | 任务页加载完成 |
 | 任务 → 模板 | `{source:'task', type:'event', event:{...}}` | 试次事件，原样记入 CSV |
 
@@ -476,7 +534,8 @@ window.parent.postMessage({source:'task', type:'ready'}, '*');
 - [ ] Chrome/Edge 打开 index.html，F11 或设置页「全屏」按钮
 - [ ] 关闭系统通知、更新弹窗；开勿扰模式
 - [ ] 确认按钮盒键码 → 设置页填 A / B / 触发键
-- [ ] 视频默认静音；如需声音，连接扫描间耳机并勾选「播放声音」
+- [ ] 分别调好纪录片与 reels 的饱和度/音量滑杆（默认静音——只有接扫描间耳机时才开音量）
+- [ ] 按本次方案设定左/右弹出概率
 - [ ] 完整试跑一遍（含 CSV 下载）确认数据无误后再约被试
 - [ ] 屏幕亮度：`#taskArea` 背景为 `#808080`（常见投影仪灰），可在 CSS 中调
 
@@ -485,6 +544,7 @@ window.parent.postMessage({source:'task', type:'ready'}, '*');
 - **页面报 manifest 未找到 / 视频不显示** → 确认 videos/manifest.js 存在且路径正确；重跑 `python3 generate_manifest.py`
 - **某视频播不出来** → 转成 H.264 + AAC 的 MP4（如 `ffmpeg -i in.mov -c:v libx264 -pix_fmt yuv420p -c:a aac out.mp4`）
 - **改了视频但页面没更新** → 重跑脚本 + 刷新（Ctrl/Cmd+R）
-- **为什么不能直接嵌实时 TikTok** → TikTok 无第三方 feed 接口、iframe 嵌入不可按键控制、依赖网络中途断连风险高；预下载池是可控替代
-- **模式 3 中央视频黑屏** → YouTube 嵌入需要联网；扫描间离线请先下载（如 `yt-dlp URL -o videos/center.mp4`）再填本地路径，或留空用内置占位任务
-- **file:// 限制** → 本模板已规避（清单用 script 标签加载而非 fetch）；如需 HTTP：`python3 -m http.server` 后访问 `http://localhost:8000/`
+- **为什么不能直接嵌实时 Instagram/TikTok** → 无第三方 feed 接口、iframe 嵌入不可按键控制、依赖网络中途断连风险高；预下载池是可控替代
+- **中央视频黑屏** → YouTube 嵌入需要联网；扫描间离线请先下载（如 `yt-dlp URL -o center/center.mp4`）再填本地路径，或留空用内置占位任务
+- **导入的视频池播不出来** → 导入池以 `/media/...` 地址由 `task.py` 伺服，请保持服务器运行（`python3 task.py serve`）；或重跑 `generate_manifest.py` 切回内置 `videos/` 池
+- **file:// 限制** → 本模板已规避大部分限制（清单用 script 标签加载而非 fetch）；只有文件夹扫描需要服务器：`python3 task.py serve` 后访问 `http://127.0.0.1:8000/`

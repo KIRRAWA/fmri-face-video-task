@@ -14,6 +14,11 @@ videos/ig_downloaded.txt
 # yt-dlp download state (machine-specific)
 videos/downloaded.txt
 
+# task.py CLI/server state (machine-specific; run logs may contain subject data)
+config.json
+config.js
+data/
+
 # macOS
 .DS_Store
 __pycache__/

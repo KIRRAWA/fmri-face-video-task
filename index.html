@@ -2,14 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>fMRI · Face Task + Short-Form Video Browsing (Dual-Mode Template)</title>
+<title>fMRI · Face Task + Short-Form Video Browsing</title>
 <style>
 /* ============ Base ============ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; background: #111; color: #ddd; overflow: hidden; }
 .hidden { display: none !important; }
-:root { --panel-w: 34%; }  /* Mode 1 panel width — adjust as needed */
 
 /* ============ Settings screen ============ */
 #settingsScreen { height: 100%; overflow-y: auto; padding: 28px; }
@@ -37,6 +36,21 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
 .btn-ghost { background: #2a2a30; color: #ccc; border: 1px solid #444; }
 .btn-ghost:hover { background: #33333b; }
 #vidCount { color: #8fd08f; font-size: 13px; margin-bottom: 14px; }
+.range-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.range-row span:first-child { font-size: 13px; color: #bbb; min-width: 72px; }
+.range-row input[type=range] { flex: 1; accent-color: #3a86ff; }
+.range-row .val { min-width: 44px; text-align: right; font-size: 12px; color: #9fd0ff; }
+.group-label { font-size: 11px; color: #8ab; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+#folderSection { margin-top: 18px; border-top: 1px solid #333; padding-top: 16px; }
+.folder-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #202024; border: 1px solid #333; border-radius: 8px; margin-bottom: 8px; }
+.folder-row .path { flex: 1; font: 12px ui-monospace, monospace; color: #bdf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-row button, .pool-row button { padding: 5px 12px; font-size: 12px; border-radius: 6px; border: 1px solid #444; background: #2a2a30; color: #ccc; cursor: pointer; }
+.folder-row button:hover, .pool-row button:hover { background: #33333b; }
+.pool-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #16202c; border: 1px solid #2a4a68; border-radius: 8px; margin-bottom: 8px; }
+.pool-row .name { font-weight: 600; color: #cfe6ff; }
+.pool-row .count { font-size: 12px; color: #8fd08f; }
+.pool-row .active-tag { font-size: 11px; color: #8fd08f; border: 1px solid #2d6b3f; padding: 1px 8px; border-radius: 999px; }
+#folderMsg { font-size: 12px; color: #bbb; min-height: 16px; margin-top: 8px; }
 details.protocol { margin-top: 22px; background: #202024; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; font-size: 13px; }
 details.protocol summary { cursor: pointer; color: #9cc; }
 details.protocol pre { background: #16161a; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5; margin-top: 10px; color: #cde; }
@@ -48,29 +62,17 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 
 /* ============ Run screen ============ */
 #runScreen { position: fixed; inset: 0; background: #000; }
-#taskArea { position: absolute; inset: 0; background: #808080; transition: margin-right .25s ease; }  /* gray level adjustable */
-#runBody.panel-open #taskArea { margin-right: var(--panel-w); }
+#taskArea { position: absolute; inset: 0; background: #808080; }  /* gray level adjustable */
 #taskFrame { width: 100%; height: 100%; border: none; display: block; }
 
-/* Mode 1: slide-in side panel */
-#panel { position: absolute; top: 0; right: 0; bottom: 0; width: var(--panel-w); background: #000;
-         transform: translateX(105%); transition: transform .25s ease; z-index: 10; }
-#runBody.panel-open #panel { transform: none; }
-#panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-
-/* Mode 2: full-page switch — slides in/out from the right */
-#fullscreen { position: fixed; inset: 0; background: #000; z-index: 20; transform: translateX(105%); transition: transform .3s ease; }
-#fullscreen.open { transform: none; }
-#fsBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-
-/* Mode 3: fixed centered stage with a black border ring. The two side strips
+/* Fixed centered stage with a black border ring. The two side strips
    are exactly one reel wide and the stage is exactly as tall as a reel, so a
    reel that pops in fills the strip without ever moving or resizing the
    center video. Derivation: with reel width x, the 16:9 stage is (100vw-2x)
    wide and 9/16·(100vw-2x) tall; a 9:16 reel of width x is 16/9·x tall.
    Equal heights: 16/9·x = 9/16·(100vw-2x) → x = 100vw / (2 + 256/81) ≈ 19.38vw. */
-#runBody.mode3 { --reel-w: 19.38vw; }
-#runBody.mode3 #taskArea {
+:root { --reel-w: 19.38vw; }
+#taskArea {
   inset: auto;
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
@@ -78,22 +80,21 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
   height: min(calc((100vw - 2 * var(--reel-w)) * 9 / 16), 100vh);
   transition: none;
 }
-#panelLeft, #panelRight { position: absolute; top: 0; bottom: 0; width: var(--panel-w); background: #000; z-index: 10; }
+#panelLeft, #panelRight { position: absolute; top: 0; bottom: 0; width: var(--reel-w); background: #000; z-index: 10; }
 #panelLeft { left: 0; transform: translateX(-105%); transition: transform .3s ease; }
 #panelRight { right: 0; transform: translateX(105%); transition: transform .3s ease; }
 #panelLeft.open, #panelRight.open { transform: none; }
 #panelLeft .panelBox, #panelRight .panelBox { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-/* Mode 3: panels sit in the side strips (same size as the stage, vertically
-   centered with it) and slide in over the black border instead of squeezing
-   the task area. */
-#runBody.mode3 #panelLeft, #runBody.mode3 #panelRight {
+/* Panels sit in the side strips (same size as the stage, vertically centered
+   with it) and slide in over the black border. */
+#panelLeft, #panelRight {
   top: 50%; bottom: auto;
   width: var(--reel-w);
   height: min(calc((100vw - 2 * var(--reel-w)) * 9 / 16), 100vh);
 }
-#runBody.mode3 #panelLeft { transform: translate(-105%, -50%); }
-#runBody.mode3 #panelRight { transform: translate(105%, -50%); }
-#runBody.mode3 #panelLeft.open, #runBody.mode3 #panelRight.open { transform: translateY(-50%); }
+#panelLeft { transform: translate(-105%, -50%); }
+#panelRight { transform: translate(105%, -50%); }
+#panelLeft.open, #panelRight.open { transform: translateY(-50%); }
 #centerVideo, #centerVideoEl { width: 100%; height: 100%; border: none; display: block; background: #000; }
 #centerVideoEl { object-fit: contain; }
 
@@ -145,27 +146,12 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <button class="lang-btn" id="langZh">中文</button>
       </div>
     </div>
-    <div class="sub" data-i18n="sub">Subject keys: A = toggle video · B = next video · 1/2 = task responses (when a task page is connected)</div>
+    <div class="sub" data-i18n="sub">Subject keys: A = open/close the pop-up video · B = next video · 1/2 = task responses (when a task page is connected)</div>
     <div id="vidCount">Detecting video pool…</div>
 
     <div class="grid">
-      <div class="field full">
-        <label for="f_mode" data-i18n="field.videoMode">Video mode</label>
-        <select id="f_mode">
-          <option value="1" data-i18n="opt.mode1">Mode 1 · Slide-in side panel (task runs in parallel)</option>
-          <option value="2" data-i18n="opt.mode2">Mode 2 · Full-page switch (task hidden)</option>
-          <option value="3" data-i18n="opt.mode3">Mode 3 · Pop-up panels from left / right (task centered)</option>
-        </select>
-      </div>
-      <div class="field full">
-        <label for="f_mode2task" data-i18n="field.mode2task">Task behavior in Mode 2</label>
-        <select id="f_mode2task">
-          <option value="hide" data-i18n="opt.mode2taskHide">Keep running hidden (no task-page changes needed)</option>
-          <option value="pause" data-i18n="opt.mode2taskPause">Pause via message (needs task-page support; falls back to hidden)</option>
-        </select>
-      </div>
       <div class="field">
-        <label for="f_popsid" data-i18n="field.popSide">Popup side (Mode 3)</label>
+        <label for="f_popsid" data-i18n="field.popSide">Popup side</label>
         <select id="f_popsid">
           <option value="random" data-i18n="opt.popRandom">Random left / right</option>
           <option value="both" data-i18n="opt.popBoth">Both sides at once</option>
@@ -174,7 +160,12 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         </select>
       </div>
       <div class="field">
-        <label for="f_poptrigger" data-i18n="field.popTrigger">Popup trigger (Mode 3)</label>
+        <label for="f_popleft" data-i18n="field.popLeftPct">Left-side chance (%) in Random mode</label>
+        <input type="number" id="f_popleft" value="50" min="0" max="100" step="1">
+        <div class="hint" data-i18n="hint.popLeftPct">Percentage of random pop-ups that open on the LEFT (right = 100 − this).</div>
+      </div>
+      <div class="field">
+        <label for="f_poptrigger" data-i18n="field.popTrigger">Popup trigger</label>
         <select id="f_poptrigger">
           <option value="manual" data-i18n="opt.popManual">Manual (subject presses A)</option>
           <option value="auto" data-i18n="opt.popAuto">Auto (pops up on a timer)</option>
@@ -185,7 +176,7 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <input type="number" id="f_popinterval" value="10" min="2" step="1">
       </div>
       <div class="field full">
-        <label for="f_centervideo" data-i18n="field.centerVideo">Mode 3 center video (YouTube URL or local video file; empty = task page placeholder)</label>
+        <label for="f_centervideo" data-i18n="field.centerVideo">Center video (YouTube URL or local video file; empty = task page placeholder)</label>
         <input type="text" id="f_centervideo" placeholder="center/center.mp4 or a YouTube URL" data-i18n-ph="ph.centerVideo">
         <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.</div>
       </div>
@@ -234,14 +225,50 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <label for="f_note" data-i18n="field.note">Note (written to CSV)</label>
         <input type="text" id="f_note" placeholder="e.g. session 1 / run 2" data-i18n-ph="ph.note">
       </div>
-      <div class="field check-row" style="margin-top:6px">
-        <input type="checkbox" id="f_sound">
-        <label for="f_sound" data-i18n="field.sound">Play sound (default muted — usually off in the scanner)</label>
+      <div class="field full">
+        <div class="group-label" data-i18n="field.centerAV">Center documentary — appearance &amp; audio</div>
+        <div class="range-row">
+          <span data-i18n="field.satCenter">Saturation</span>
+          <input type="range" id="f_satcenter" min="0" max="200" step="5" value="100">
+          <span class="val" id="v_satcenter">100%</span>
+        </div>
+        <div class="range-row">
+          <span data-i18n="field.volCenter">Volume</span>
+          <input type="range" id="f_volcenter" min="0" max="100" step="5" value="0">
+          <span class="val" id="v_volcenter">0%</span>
+        </div>
+        <div class="hint" data-i18n="hint.centerAV">Volume applies to local video files (YouTube embeds stay muted). Saturation 0% = black &amp; white.</div>
+      </div>
+      <div class="field full">
+        <div class="group-label" data-i18n="field.reelAV">Reels (left/right pop-ups) — appearance &amp; audio</div>
+        <div class="range-row">
+          <span data-i18n="field.satReel">Saturation</span>
+          <input type="range" id="f_satreel" min="0" max="200" step="5" value="100">
+          <span class="val" id="v_satreel">100%</span>
+        </div>
+        <div class="range-row">
+          <span data-i18n="field.volReel">Volume</span>
+          <input type="range" id="f_volreel" min="0" max="100" step="5" value="0">
+          <span class="val" id="v_volreel">0%</span>
+        </div>
       </div>
       <div class="field check-row" style="margin-top:6px">
         <input type="checkbox" id="f_decor" checked>
-        <label for="f_decor" data-i18n="field.decor">TikTok-style decorations (like column · user info · progress bar)</label>
+        <label for="f_decor" data-i18n="field.decor">Instagram-style decorations (like count · @author · progress bar)</label>
       </div>
+    </div>
+
+    <div id="folderSection">
+      <h2 data-i18n="folders.title" style="font-size:15px;color:#fff;margin-bottom:10px">Video folders</h2>
+      <div data-i18n="folders.registerHint" style="font-size:12px;color:#777;margin-bottom:10px">Register a folder path (e.g. a reel-crawler review_videos folder); scanning finds the videos inside and lets you import them as the active pool.</div>
+      <div id="folderList"></div>
+      <div class="folder-row">
+        <input type="text" id="f_folderpath" placeholder="/absolute/path/to/video/folder" style="flex:1;background:#26262c;border:1px solid #444;color:#eee;border-radius:6px;padding:8px 10px;font-size:13px">
+        <button id="btnFolderAdd" data-i18n="folders.add">Register folder</button>
+        <button id="btnFolderScan" data-i18n="folders.scan">Scan</button>
+      </div>
+      <div id="poolList"></div>
+      <div id="folderMsg"></div>
     </div>
 
     <div class="btn-row">
@@ -274,17 +301,9 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
       <iframe id="centerVideo" class="hidden" title="center video" allow="autoplay; fullscreen"></iframe>
       <video id="centerVideoEl" class="hidden" muted loop autoplay playsinline title="center video (local file)"></video>
     </div>
-    <!-- Mode 1 slide-in panel -->
-    <div id="panel">
-      <div id="panelBox"></div>
-    </div>
-    <!-- Mode 3 pop-up panels -->
+    <!-- Left / right pop-up panels -->
     <div id="panelLeft"><div class="panelBox" id="panelBoxL"></div></div>
     <div id="panelRight"><div class="panelBox" id="panelBoxR"></div></div>
-  </div>
-  <!-- Mode 2 full-page -->
-  <div id="fullscreen" class="hidden">
-    <div id="fsBox"></div>
   </div>
   <!-- Trigger wait -->
   <div id="blackout" class="hidden">Waiting for scanner trigger…</div>
@@ -301,6 +320,8 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 
 <!-- Video manifest: generated by generate_manifest.py (loaded via script tag for file:// compatibility) -->
 <script src="videos/manifest.js"></script>
+<!-- CLI/config overrides: written by task.py (absent = interactive defaults) -->
+<script src="config.js"></script>
 <script>
 (function(){
 'use strict';
@@ -309,26 +330,36 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 var I18N = {
   en: {
     'app.title': 'fMRI · Face Task + Short-Form Video Browsing',
-    'sub': 'Subject keys: A = toggle video · B = next video · 1/2 = task responses (when a task page is connected)',
-    'field.videoMode': 'Video mode',
-    'opt.mode1': 'Mode 1 · Slide-in side panel (task runs in parallel)',
-    'opt.mode2': 'Mode 2 · Full-page switch (task hidden)',
-    'opt.mode3': 'Mode 3 · Pop-up panels from left / right (task centered)',
-    'field.popSide': 'Popup side (Mode 3)',
+    'sub': 'Subject keys: A = open/close the pop-up video · B = next video · 1/2 = task responses (when a task page is connected)',
+    'folders.title': 'Video folders',
+    'folders.registerHint': 'Register a folder path (e.g. a reel-crawler review_videos folder); scanning finds the videos inside and lets you import them as the active pool.',
+    'folders.add': 'Register folder',
+    'folders.scan': 'Scan',
+    'folders.remove': 'Remove',
+    'folders.import': 'Import',
+    'folders.use': 'Use',
+    'folders.active': 'active',
+    'folders.videos': 'videos',
+    'folders.none': 'No folders registered yet.',
+    'folders.noPools': 'No video pools found. Register a folder path above and click Scan.',
+    'folders.needsServer': 'Folder scanning needs the local server: run  python3 task.py serve  (file:// cannot read folder paths).',
+    'folders.imported': 'Pool "{name}" imported ({n} videos) — reloading…',
+    'folders.scanned': 'Scan finished: {n} pool(s) found.',
+    'folders.error': 'Error: {msg}',
+    'field.popSide': 'Popup side',
     'opt.popRandom': 'Random left / right',
     'opt.popBoth': 'Both sides at once',
     'opt.popLeft': 'Left only',
     'opt.popRight': 'Right only',
-    'field.popTrigger': 'Popup trigger (Mode 3)',
+    'field.popTrigger': 'Popup trigger',
     'opt.popManual': 'Manual (subject presses A)',
     'opt.popAuto': 'Auto (pops up on a timer)',
     'field.popInterval': 'Auto popup interval (seconds)',
-    'field.centerVideo': 'Mode 3 center video (YouTube URL or local video file; empty = task page placeholder)',
+    'field.popLeftPct': 'Left-side chance (%) in Random mode',
+    'hint.popLeftPct': 'Percentage of random pop-ups that open on the LEFT (right = 100 − this).',
+    'field.centerVideo': 'Center video (YouTube URL or local video file; empty = task page placeholder)',
     'ph.centerVideo': 'center/center.mp4 or a YouTube URL',
     'hint.centerVideo': 'The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.',
-    'field.mode2task': 'Task behavior in Mode 2',
-    'opt.mode2taskHide': 'Keep running hidden (no task-page changes needed)',
-    'opt.mode2taskPause': 'Pause via message (needs task-page support; falls back to hidden)',
     'field.videoSource': 'Video source',
     'opt.srcAuto': 'Auto (real videos if present, else placeholder clips)',
     'opt.srcReal': 'Real videos only (videos/manifest.js)',
@@ -347,8 +378,14 @@ var I18N = {
     'field.subject': 'Subject ID',
     'field.note': 'Note (written to CSV)',
     'ph.note': 'e.g. session 1 / run 2',
-    'field.sound': 'Play sound (default muted — usually off in the scanner)',
-    'field.decor': 'TikTok-style decorations (like column · user info) — placeholder clips only; real videos show the @author label',
+    'field.centerAV': 'Center documentary — appearance &amp; audio',
+    'field.satCenter': 'Saturation',
+    'field.volCenter': 'Volume',
+    'hint.centerAV': 'Volume applies to local video files (YouTube embeds stay muted). Saturation 0% = black &amp; white.',
+    'field.reelAV': 'Reels (left/right pop-ups) — appearance &amp; audio',
+    'field.satReel': 'Saturation',
+    'field.volReel': 'Volume',
+    'field.decor': 'Instagram-style decorations (like count · @author) — placeholder clips only; real videos show the real @author and like count',
     'btn.start': 'Start experiment',
     'btn.fullscreen': 'Fullscreen',
     'btn.download': 'Download CSV data',
@@ -370,26 +407,36 @@ var I18N = {
   },
   zh: {
     'app.title': 'fMRI · 人脸任务 + 短视频浏览',
-    'sub': '受试者按键：A = 开/关视频 · B = 下一条 · 1/2 = 任务作答（接入任务页后）',
-    'field.videoMode': '视频模式',
-    'opt.mode1': '模式 1 · 右侧滑出面板（任务并行继续）',
-    'opt.mode2': '模式 2 · 整页切换（任务隐藏）',
-    'opt.mode3': '模式 3 · 左右弹出面板（任务居中）',
-    'field.popSide': '弹出侧（模式 3）',
+    'sub': '受试者按键：A = 打开/关闭弹出视频 · B = 下一条 · 1/2 = 任务作答（接入任务页后）',
+    'folders.title': '视频文件夹',
+    'folders.registerHint': '注册一个文件夹路径（如 reel-crawler 的 review_videos 文件夹）；扫描会找到里面的视频并导入为当前视频池。',
+    'folders.add': '注册文件夹',
+    'folders.scan': '扫描',
+    'folders.remove': '移除',
+    'folders.import': '导入',
+    'folders.use': '使用',
+    'folders.active': '当前',
+    'folders.videos': '视频',
+    'folders.none': '还没有注册文件夹。',
+    'folders.noPools': '未发现视频池。在上方注册路径后点「扫描」。',
+    'folders.needsServer': '文件夹扫描需要本地服务器：运行 python3 task.py serve（file:// 无法读取文件夹路径）。',
+    'folders.imported': '视频池「{name}」已导入（{n} 条视频）— 正在刷新…',
+    'folders.scanned': '扫描完成：找到 {n} 个视频池。',
+    'folders.error': '错误：{msg}',
+    'field.popSide': '弹出侧',
     'opt.popRandom': '随机左边 / 右边',
     'opt.popBoth': '两侧同时弹出',
     'opt.popLeft': '仅左边',
     'opt.popRight': '仅右边',
-    'field.popTrigger': '弹出方式（模式 3）',
+    'field.popTrigger': '弹出方式',
     'opt.popManual': '手动（受试者按 A）',
     'opt.popAuto': '自动（定时弹出）',
     'field.popInterval': '自动弹出间隔（秒）',
-    'field.centerVideo': '模式 3 居中视频（YouTube 链接或本地视频文件；留空 = 任务页占位）',
+    'field.popLeftPct': '随机模式下左侧出现概率（%）',
+    'hint.popLeftPct': '随机弹出时出现在左侧的百分比（右侧 = 100 − 此值）。',
+    'field.centerVideo': '居中视频（YouTube 链接或本地视频文件；留空 = 任务页占位）',
     'ph.centerVideo': 'center/center.mp4 或 YouTube 链接',
     'hint.centerVideo': '受试者观看的居中任务视频，两侧随机弹出短视频。填本地文件（如 center/center.mp4）可离线播放；YouTube 需联网。',
-    'field.mode2task': '模式 2 时任务行为',
-    'opt.mode2taskHide': '隐藏继续（无需任务页改动）',
-    'opt.mode2taskPause': '消息暂停（需任务页支持；不支持则退化为隐藏）',
     'field.videoSource': '视频来源',
     'opt.srcAuto': '自动（有真实视频就用，否则占位动画）',
     'opt.srcReal': '仅真实视频（videos/manifest.js）',
@@ -408,8 +455,14 @@ var I18N = {
     'field.subject': '受试者编号',
     'field.note': '备注（写入 CSV）',
     'ph.note': '如 session 1 / run 2',
-    'field.sound': '播放声音（默认静音，扫描间通常不开）',
-    'field.decor': 'TikTok 风格装饰（点赞列 · 用户信息）— 仅占位动画；真实视频显示 @作者',
+    'field.centerAV': '居中纪录片 — 画面与声音',
+    'field.satCenter': '饱和度',
+    'field.volCenter': '音量',
+    'hint.centerAV': '音量仅作用于本地视频文件（YouTube 嵌入保持静音）。饱和度 0% = 黑白。',
+    'field.reelAV': 'Reels（左右弹出）— 画面与声音',
+    'field.satReel': '饱和度',
+    'field.volReel': '音量',
+    'field.decor': 'Instagram 风格装饰（点赞数 · @作者）— 仅占位动画；真实视频显示真实 @作者与点赞数',
     'btn.start': '开始实验',
     'btn.fullscreen': '全屏',
     'btn.download': '下载数据 CSV',
@@ -441,17 +494,17 @@ function trFill(key, map){
 }
 function subjectHTML(){
   return LANG === 'zh'
-    ? '<p style="line-height:1.9">实验过程中，随时按 <b>A</b> 打开视频（模式 1：右侧滑出竖屏面板；模式 2：整页切到视频），按 <b>B</b> 看下一条，再按 <b>A</b> 收起视频回到任务。是否刷视频、刷多久完全由你决定。任务作答用 <b>1</b> / <b>2</b> 键。</p>'
-    : '<p style="line-height:1.9">During the run, press <b>A</b> at any time to open the video (Mode 1: a vertical panel slides in from the right; Mode 2: the page switches to the video), press <b>B</b> to go to the next video, and press <b>A</b> again to close it and return to the task. Whether and how long you browse is entirely up to you. The task responses use keys <b>1</b> / <b>2</b>.</p>';
+    ? '<p style="line-height:1.9">实验过程中，一部纪录片在屏幕中央播放。随时按 <b>A</b> 在左侧或右侧弹出短视频，按 <b>B</b> 看下一条，再按 <b>A</b> 收起弹窗回到任务。是否刷视频、刷多久完全由你决定。任务作答用 <b>1</b> / <b>2</b> 键。</p>'
+    : '<p style="line-height:1.9">A documentary plays in the center of the screen. Press <b>A</b> at any time to pop a short video up on the left or right, press <b>B</b> to go to the next one, and press <b>A</b> again to close the pop-ups and return to the task. Whether and how long you browse is entirely up to you. The task responses use keys <b>1</b> / <b>2</b>.</p>';
 }
 function guideHTML(){
   return LANG === 'zh'
     ? '<ol>' +
-      '<li>选择<b>视频模式</b>（1：侧滑面板 · 2：整页切换 · 3：左右弹出，任务居中）并调整其他参数。</li>' +
+      '<li>调整<b>居中视频</b>、<b>弹出侧与左侧概率</b>、<b>饱和度与音量</b>滑杆及其他参数。</li>' +
       '<li>点击<b>开始实验</b>。触发模式下黑屏，直到按下<b>触发键</b>（默认 <code>5</code>）开始。</li>' +
-      '<li>立即体验：<b>任务页面</b>留空即内置占位任务，按 <b>A</b> 打开视频、<b>B</b> 下一条、再按 <b>A</b> 关闭。</li>' +
+      '<li>立即体验：<b>任务页面</b>留空即内置占位任务，按 <b>A</b> 弹出视频、<b>B</b> 下一条、再按 <b>A</b> 收起。</li>' +
       '<li>运行结束（或按 <b>Esc</b>）后，结束页显示统计并自动下载含全部毫秒级事件的 CSV。</li>' +
-      '<li>使用真实视频：把 MP4 放进 <code>videos/</code> 并运行 <code>python3 generate_manifest.py</code>。</li>' +
+      '<li>使用真实视频：把 MP4 放进 <code>videos/</code> 并运行 <code>python3 generate_manifest.py</code>；或注册采集器文件夹（<b>视频文件夹</b>）导入 Instagram reels（含作者与点赞数）。</li>' +
       '</ol>' +
       '<table>' +
       '<tr><th>按键</th><th>功能</th></tr>' +
@@ -463,11 +516,11 @@ function guideHTML(){
       '<tr><td>R</td><td>返回设置（仅结束页）</td></tr>' +
       '</table>'
     : '<ol>' +
-      '<li>Pick a <b>Video mode</b> (1: slide-in panel · 2: full-page switch · 3: left/right pop-ups with the task centered) and adjust the other settings.</li>' +
+      '<li>Adjust the <b>center video</b>, <b>pop-up side / left-side chance</b>, <b>saturation &amp; volume</b> sliders, and the other settings.</li>' +
       '<li>Click <b>Start experiment</b>. In trigger mode the screen stays black until the <b>trigger key</b> (default <code>5</code>).</li>' +
-      '<li>Try it now: leave <b>Task page</b> empty to get the built-in placeholder task, then press <b>A</b> to open the video, <b>B</b> to scroll, <b>A</b> to close.</li>' +
+      '<li>Try it now: leave <b>Task page</b> empty to get the built-in placeholder task, then press <b>A</b> to pop a video up, <b>B</b> to scroll, <b>A</b> to close.</li>' +
       '<li>When the run ends (or you press <b>Esc</b>), an end screen shows statistics and downloads the CSV of all timestamped events.</li>' +
-      '<li>To use real videos: drop MP4 files into <code>videos/</code> and run <code>python3 generate_manifest.py</code>.</li>' +
+      '<li>To use real videos: drop MP4 files into <code>videos/</code> and run <code>python3 generate_manifest.py</code>, or register a collector folder under <b>Video folders</b> to import Instagram reels (author + like count included).</li>' +
       '</ol>' +
       '<table>' +
       '<tr><th>Key</th><th>Action</th></tr>' +
@@ -495,7 +548,7 @@ function protocolHTML(){
       '3. 可选上报（合并进同一份 CSV）：\n' +
       '   window.parent.postMessage({source:\'task\', type:\'event\',\n' +
       '     event:{type:\'trial\', ...任何字段}}, \'*\');\n' +
-      '4. 可选：加载完发送 {source:\'task\', type:\'ready\'}，启用模式 2「暂停」功能\n\n' +
+      '4. 可选：加载完发送 {source:\'task\', type:\'ready\'} 告知任务页已就绪\n\n' +
       '完整协议与示例代码见 README.md。'
     : 'The task page and the video layer talk over postMessage:\n\n' +
       'Minimal changes the task page must make:\n' +
@@ -511,7 +564,7 @@ function protocolHTML(){
       '3. Optional reporting (merged into the same CSV):\n' +
       '   window.parent.postMessage({source:\'task\', type:\'event\',\n' +
       '     event:{type:\'trial\', ...any fields}}, \'*\');\n' +
-      '4. Optional: send {source:\'task\', type:\'ready\'} on load to enable Mode 2 "Pause".\n\n' +
+      '4. Optional: send {source:\'task\', type:\'ready\'} on load to announce readiness.\n\n' +
       'Full protocol and example code in README.md.';
 }
 function applyLang(){
@@ -542,12 +595,13 @@ function setLang(lang){
 
 /* ================= Default config ================= */
 var DEFAULTS = {
-  mode: '1', mode2task: 'hide', videosource: 'auto',
-  tasksrc: '', durationMin: 10, sound: false,
+  videosource: 'auto',
+  tasksrc: '', durationMin: 10,
   trigger: 'wait', triggerkey: '5', keya: 'a', keyb: 'b',
   decor: true, subject: 'P01', note: '',
-  popside: 'random', poptrigger: 'manual', popinterval: 10,
-  centervideo: 'center/center.mp4'
+  popside: 'random', popleft: 50, poptrigger: 'manual', popinterval: 10,
+  centervideo: 'center/center.mp4',
+  satcenter: 100, volcenter: 0, satreel: 100, volreel: 0
 };
 var S = {};
 
@@ -555,18 +609,17 @@ var S = {};
 var rows = [];            // event log {t, subject, type, key, value, note}
 var t0 = null;            // run start (performance.now base)
 var runActive = false, waitingTrigger = false;
-var taskReady = false, warnedPause = false;
+var taskReady = false;
 var clipList = [], order = [];
 var runTimer = null, popIntervalTimer = null;
 
 /* ================= DOM ================= */
 function $(id){ return document.getElementById(id); }
 var taskFrame = $('taskFrame'), centerVideo = $('centerVideo'), centerVideoEl = $('centerVideoEl');
-var runBody = $('runBody'), panel = $('panel'), panelBox = $('panelBox'),
+var runBody = $('runBody'),
     popL = $('panelLeft'), popR = $('panelRight'),
     panelBoxL = $('panelBoxL'), panelBoxR = $('panelBoxR'),
-    fullscreen = $('fullscreen'), fsBox = $('fsBox'), blackout = $('blackout'),
-    endScreen = $('endScreen');
+    blackout = $('blackout'), endScreen = $('endScreen');
 
 /* ================= Placeholder short clips (used when no real videos) ================= */
 var FAKE_CLIPS = [
@@ -621,7 +674,8 @@ function buildClipList(){
       return {
         kind: 'file', name: String(src).split('/').pop(), src: src,
         user: meta.author ? '@' + meta.author : '@clip_' + (i + 1),
-        author: meta.author || '', desc: meta.desc || ''
+        author: meta.author || '', desc: meta.desc || '',
+        likes: typeof meta.likes === 'number' ? meta.likes : null
       };
     });
   } else {
@@ -637,6 +691,13 @@ function buildClipList(){
 }
 
 /* ================= Video playback ================= */
+function fmtLikes(n){
+  // Instagram-style compact count: 45123 -> 45.1K, 2400000 -> 2.4M
+  if(n == null || isNaN(n)) return null;
+  if(n < 1000) return String(n);
+  if(n < 1000000) return (n / 1000).toFixed(n < 10000 ? 1 : 0) + 'K';
+  return (n / 1000000).toFixed(n < 10000000 ? 1 : 0) + 'M';
+}
 function makePlayer(root, label){
   var p = {
     root: root, label: label, open: false,
@@ -649,8 +710,9 @@ function makePlayer(root, label){
     p.videoBox.innerHTML =
       '<div class="mediaLayer"><video playsinline muted></video><canvas></canvas></div>' +
       '<div class="mediaLayer"><video playsinline muted></video><canvas></canvas></div>' +
-      '<div class="decorCol hidden"><div>❤️<span>1.2k</span></div><div>💬<span>34</span></div>' +
-      '<div>↗<span>Share</span></div><div>🔖<span></span></div></div>' +
+      '<div class="decorCol hidden"><div class="likeBtn">❤️<span class="likeCount"></span></div>' +
+      '<div class="fakeOnly">💬<span>34</span></div>' +
+      '<div class="fakeOnly">↗<span>Share</span></div><div class="fakeOnly">🔖<span></span></div></div>' +
       '<div class="vidInfo hidden">@<span class="vidUser"></span><p class="vidCaption"></p></div>' +
       '<div class="vidProgress"><div class="vidProgressBar"></div></div>';
     p.root.appendChild(p.videoBox);
@@ -663,7 +725,7 @@ function makePlayer(root, label){
     p.layers[0].el.style.transform = 'translateY(0)';
     p.layers[1].el.style.transform = 'translateY(100%)';
     p.layers.forEach(function(L, i){
-      L.video.muted = !S.sound;
+      p.applyAV(L);
       L.video.addEventListener('loadeddata', function(){
         if(p.open && L.clip && L.clip.kind === 'file') log('video_play', p.label, L.clip.name);
       });
@@ -681,16 +743,38 @@ function makePlayer(root, label){
       });
     });
   };
+  p.applyAV = function(L){
+    // Reel saturation + volume settings: saturate() on the video/canvas,
+    // volume 0 = muted (browsers block unmuted autoplay otherwise).
+    var v = (S.volreel || 0) / 100;
+    L.video.volume = v;
+    L.video.muted = v === 0;
+    var sat = S.satreel == null ? 100 : S.satreel;
+    var f = 'saturate(' + (sat / 100) + ')';
+    L.video.style.filter = f;
+    L.canvas.style.filter = f;
+  };
   p.updateDecor = function(){
     if(!p.videoBox) return;
     var decCol = p.videoBox.querySelector('.decorCol');
     var vidInfo = p.videoBox.querySelector('.vidInfo');
     var vidUser = p.videoBox.querySelector('.vidUser');
     var vidCaption = p.videoBox.querySelector('.vidCaption');
-    // The like/comment column is simulated — placeholder clips only. Real
-    // files play clean and always show the @author label bottom-left.
+    var likeEl = p.videoBox.querySelector('.likeCount');
     var isFake = p.curClip && p.curClip.kind === 'fake';
-    decCol.classList.toggle('hidden', !S.decor || !isFake);
+    // The like column: simulated for placeholder clips; for real files it
+    // shows the REAL Instagram-style like count on the right side of the
+    // screen (imported from the collector metadata). Real files always
+    // show the @author label bottom-left.
+    var likes = (!isFake && p.curClip) ? fmtLikes(p.curClip.likes) : null;
+    var showCol = S.decor && (isFake || likes !== null);
+    decCol.classList.toggle('hidden', !showCol);
+    if(showCol){
+      likeEl.textContent = likes !== null ? likes : '1.2k';
+      p.videoBox.querySelectorAll('.fakeOnly').forEach(function(el){
+        el.style.display = likes !== null ? 'none' : '';
+      });
+    }
     vidInfo.classList.toggle('hidden', !p.curClip || (isFake && !S.decor));
     if(p.curClip){
       if(isFake){
@@ -793,16 +877,18 @@ function makePlayer(root, label){
     if(!clipList.length) return;
     if(p.sliding){ clearTimeout(p.slideTimer); p.completeSlide(true); }   // finish current motion instantly
     p.curIdx = (p.curIdx + 1) % order.length;
-    log('video_next', p.label, clipList[order[p.curIdx]].name);
-    p.showClip(clipList[order[p.curIdx]], true);
+    var cl = clipList[order[p.curIdx]];
+    log('video_next', p.label, cl.name, 'author=' + (cl.author || '') + ' likes=' + (cl.likes == null ? '' : cl.likes));
+    p.showClip(cl, true);
   };
   p.openPanel = function(){
     if(p.open) return;
     p.open = true;
     if(!p.curClip){
       p.curIdx = p.startIdx;
-      log('video_next', p.label, clipList[order[p.curIdx]].name);
-      p.showClip(clipList[order[p.curIdx]], false);
+      var cl0 = clipList[order[p.curIdx]];
+      log('video_next', p.label, cl0.name, 'author=' + (cl0.author || '') + ' likes=' + (cl0.likes == null ? '' : cl0.likes));
+      p.showClip(cl0, false);
     } else if(p.curClip.kind === 'file'){
       p.layers[p.activeL].video.play().catch(function(){});
     } else {
@@ -819,47 +905,18 @@ function makePlayer(root, label){
   return p;
 }
 
-/* ---- Players and per-mode dispatch ---- */
-var P = null, PL = null, PR = null;   // main (modes 1/2) · left · right
+/* ---- Players: left and right pop-up panels ---- */
+var PL = null, PR = null;
 
 function activateContainers(){
-  if(S.mode === '3'){
-    PL = makePlayer(panelBoxL, 'left');  PL.startIdx = 0;
-    PR = makePlayer(panelBoxR, 'right'); PR.startIdx = Math.floor(order.length / 2);
-    PL.build(); PR.build();
-    if(S.poptrigger === 'auto'){
-      PL.onEnded = function(){ closePop(PL); };   // auto popups vanish when the clip ends
-      PR.onEnded = function(){ closePop(PR); };
-    }
-  } else {
-    P = makePlayer(S.mode === '1' ? panelBox : fsBox, S.mode === '1' ? 'panel' : 'fullscreen');
-    P.build();
+  PL = makePlayer(panelBoxL, 'left');  PL.startIdx = 0;
+  PR = makePlayer(panelBoxR, 'right'); PR.startIdx = Math.floor(order.length / 2);
+  PL.build(); PR.build();
+  if(S.poptrigger === 'auto'){
+    PL.onEnded = function(){ closePop(PL); };   // auto popups vanish when the clip ends
+    PR.onEnded = function(){ closePop(PR); };
   }
 }
-function openVideo(){
-  if(S.mode === '1') runBody.classList.add('panel-open');
-  else {
-    fullscreen.classList.remove('hidden');
-    void fullscreen.offsetWidth;                 // force reflow so the slide-in animates
-    fullscreen.classList.add('open');
-    if(S.mode2task === 'pause'){
-      if(taskReady) postToTask('pause');
-      else if(!warnedPause){ log('warn_task_pause_unsupported', null, null, 'Task page did not report ready; fell back to hidden-continue'); warnedPause = true; }
-    }
-  }
-  P.openPanel();
-}
-function closeVideo(){
-  if(!P.open) return;
-  if(S.mode === '1') runBody.classList.remove('panel-open');
-  else {
-    fullscreen.classList.remove('open');         // slide out first…
-    setTimeout(function(){ if(!P.open) fullscreen.classList.add('hidden'); }, 320);
-    if(S.mode2task === 'pause' && taskReady) postToTask('resume');
-  }
-  P.closePanel();
-}
-function toggleVideo(){ P.open ? closeVideo() : openVideo(); }
 function openPop(p){
   if(p === PL) popL.classList.add('open');
   else popR.classList.add('open');
@@ -870,12 +927,19 @@ function closePop(p){
   else popR.classList.remove('open');
   p.closePanel();
 }
+function pickSide(){
+  // Random mode honors the left-side percentage setting: P(left) = popleft%.
+  if(S.popside === 'random')
+    return (Math.random() * 100) < (S.popleft || 50) ? 'left' : 'right';
+  return S.popside;
+}
 function togglePop(){
   if(PL.open || PR.open){
     if(PL.open) closePop(PL);
     if(PR.open) closePop(PR);
   } else {
-    var side = S.popside === 'random' ? (Math.random() < 0.5 ? 'left' : 'right') : S.popside;
+    var side = pickSide();
+    log('popup_manual', null, side);
     if(side === 'both'){ openPop(PL); openPop(PR); }
     else openPop(side === 'left' ? PL : PR);
   }
@@ -883,7 +947,7 @@ function togglePop(){
 function popAuto(){
   if(PL.open) closePop(PL);
   if(PR.open) closePop(PR);
-  var side = S.popside === 'random' ? (Math.random() < 0.5 ? 'left' : 'right') : S.popside;
+  var side = pickSide();
   log('popup_auto', null, side);
   if(side === 'both'){ openPop(PL); openPop(PR); }
   else openPop(side === 'left' ? PL : PR);
@@ -922,18 +986,25 @@ function toEmbedUrl(url){
 function setupTaskArea(){
   centerVideo.classList.add('hidden');
   centerVideoEl.classList.add('hidden');
-  if(S.mode === '3' && S.centervideo){
+  if(S.centervideo){
     // Video file (local path or direct .mp4/.webm URL) → <video> element:
     // autoplays muted and works offline. YouTube/other web links → iframe
     // (YouTube URLs are converted to embeds by toEmbedUrl).
     if(!/^https?:\/\//.test(S.centervideo) || /\.(mp4|webm|m4v|mov)([?#]|$)/i.test(S.centervideo)){
       centerVideoEl.src = S.centervideo;
       centerVideoEl.classList.remove('hidden');
+      var vc = (S.volcenter || 0) / 100;
+      centerVideoEl.volume = vc; centerVideoEl.muted = vc === 0;
       centerVideoEl.play().catch(function(){});
     } else {
       centerVideo.src = toEmbedUrl(S.centervideo);
       centerVideo.classList.remove('hidden');
     }
+    // Center-documentary saturation (YouTube embeds stay muted).
+    var satc = S.satcenter == null ? 100 : S.satcenter;
+    var fc = 'saturate(' + (satc / 100) + ')';
+    centerVideo.style.filter = fc;
+    centerVideoEl.style.filter = fc;
     taskFrame.classList.add('hidden');
   } else if(S.tasksrc){
     taskFrame.removeAttribute('srcdoc');
@@ -975,15 +1046,11 @@ window.addEventListener('keydown', function(e){
   log('key', k, null, e.repeat ? 'repeat' : 'press');
   if(e.repeat) return;
   if(k === S.keya.toLowerCase()){
-    if(S.mode === '3') togglePop();
-    else toggleVideo();
+    togglePop();
   }
   else if(k === S.keyb.toLowerCase()){
-    if(S.mode === '3'){
-      if(PL && PL.open) PL.next();
-      if(PR && PR.open) PR.next();
-    }
-    else if(P && P.open) P.next();
+    if(PL && PL.open) PL.next();
+    if(PR && PR.open) PR.next();
   }
   else if(k === 'escape') endRun('abort');
   else postToTask('key', { key: k });
@@ -992,12 +1059,9 @@ window.addEventListener('keydown', function(e){
 /* ================= Run lifecycle ================= */
 function readSettings(){
   S = {
-    mode: $('f_mode').value,
-    mode2task: $('f_mode2task').value,
     videosource: $('f_videosource').value,
     tasksrc: $('f_tasksrc').value.trim(),
     durationMin: Math.max(0.1, parseFloat($('f_duration').value) || 10),
-    sound: $('f_sound').checked,
     trigger: $('f_trigger').value,
     triggerkey: ($('f_triggerkey').value.trim() || '5').toLowerCase(),
     keya: ($('f_keya').value.trim() || 'a').toLowerCase(),
@@ -1006,9 +1070,14 @@ function readSettings(){
     subject: $('f_subject').value.trim() || 'P01',
     note: $('f_note').value.trim(),
     popside: $('f_popsid').value,
+    popleft: Math.min(100, Math.max(0, parseFloat($('f_popleft').value) || 50)),
     poptrigger: $('f_poptrigger').value,
     popinterval: Math.max(2, parseFloat($('f_popinterval').value) || 10),
-    centervideo: $('f_centervideo').value.trim()
+    centervideo: $('f_centervideo').value.trim(),
+    satcenter: Math.min(200, Math.max(0, parseInt($('f_satcenter').value, 10) || 100)),
+    volcenter: Math.min(100, Math.max(0, parseInt($('f_volcenter').value, 10) || 0)),
+    satreel: Math.min(200, Math.max(0, parseInt($('f_satreel').value, 10) || 100)),
+    volreel: Math.min(100, Math.max(0, parseInt($('f_volreel').value, 10) || 0))
   };
 }
 function saveSettings(){ try { localStorage.setItem('fmri-video-task-settings', JSON.stringify(S)); } catch(e){} }
@@ -1016,31 +1085,35 @@ function loadSettings(){
   var d = {};
   try { d = JSON.parse(localStorage.getItem('fmri-video-task-settings') || '{}'); } catch(e){ d = {}; }
   for(var k in DEFAULTS) if(!(k in d)) d[k] = DEFAULTS[k];
+  // CLI overrides (task.py run writes config.js): highest priority.
+  var ovr = (typeof window.TASK_CONFIG !== 'undefined' && window.TASK_CONFIG && window.TASK_CONFIG.settings) || {};
+  for(var k2 in ovr) if(ovr[k2] !== undefined && ovr[k2] !== null) d[k2] = ovr[k2];
   // 2026-09-25: the previous default was a YouTube URL that fails as an embed
   // on many machines — migrate saved settings to the shipped local file once.
   if(d.centervideo === 'https://www.youtube.com/watch?v=g5WkOr565I4')
     d.centervideo = DEFAULTS.centervideo;
-  $('f_mode').value = d.mode; $('f_mode2task').value = d.mode2task;
   $('f_videosource').value = d.videosource; $('f_tasksrc').value = d.tasksrc;
-  $('f_duration').value = d.durationMin; $('f_sound').checked = d.sound;
+  $('f_duration').value = d.durationMin;
   $('f_trigger').value = d.trigger; $('f_triggerkey').value = d.triggerkey;
   $('f_keya').value = d.keya; $('f_keyb').value = d.keyb;
   $('f_decor').checked = d.decor; $('f_subject').value = d.subject; $('f_note').value = d.note;
-  $('f_popsid').value = d.popside; $('f_poptrigger').value = d.poptrigger;
+  $('f_popsid').value = d.popside; $('f_popleft').value = d.popleft;
+  $('f_poptrigger').value = d.poptrigger;
   $('f_popinterval').value = d.popinterval; $('f_centervideo').value = d.centervideo;
+  $('f_satcenter').value = d.satcenter; $('v_satcenter').textContent = d.satcenter + '%';
+  $('f_volcenter').value = d.volcenter; $('v_volcenter').textContent = d.volcenter + '%';
+  $('f_satreel').value = d.satreel; $('v_satreel').textContent = d.satreel + '%';
+  $('f_volreel').value = d.volreel; $('v_volreel').textContent = d.volreel + '%';
 }
 function startRun(){
   readSettings();
   saveSettings();
-  rows = []; t0 = null; taskReady = false; warnedPause = false;
+  rows = []; t0 = null; taskReady = false;
   buildClipList();
   $('settingsScreen').classList.add('hidden');
   $('runScreen').classList.remove('hidden');
   $('endScreen').classList.add('hidden');
-  runBody.classList.remove('panel-open');
-  runBody.classList.toggle('mode3', S.mode === '3');
   popL.classList.remove('open'); popR.classList.remove('open');
-  fullscreen.classList.add('hidden'); fullscreen.classList.remove('open');
   clearInterval(popIntervalTimer);
   activateContainers();
   setupTaskArea();
@@ -1057,12 +1130,13 @@ function beginRun(){
   t0 = performance.now();
   blackout.classList.add('hidden');
   runActive = true;
-  log('session_start', null, null, 'mode=' + S.mode + ' mode2task=' + S.mode2task +
-      ' videosource=' + S.videosource + ' durationMin=' + S.durationMin +
-      ' sound=' + S.sound + ' decor=' + S.decor + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
-      ' popside=' + S.popside + ' poptrigger=' + S.poptrigger +
-      ' centervideo=' + (S.centervideo || '(none)') + ' note=' + S.note);
-  if(S.mode === '3' && S.poptrigger === 'auto'){
+  log('session_start', null, null, 'videosource=' + S.videosource + ' durationMin=' + S.durationMin +
+      ' decor=' + S.decor + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
+      ' popside=' + S.popside + ' popleft=' + S.popleft + ' poptrigger=' + S.poptrigger +
+      ' centervideo=' + (S.centervideo || '(none)') +
+      ' satcenter=' + S.satcenter + ' volcenter=' + S.volcenter +
+      ' satreel=' + S.satreel + ' volreel=' + S.volreel + ' note=' + S.note);
+  if(S.poptrigger === 'auto'){
     popIntervalTimer = setInterval(function(){ if(runActive) popAuto(); }, S.popinterval * 1000);
   }
   runTimer = setTimeout(function(){ endRun('timeout'); }, S.durationMin * 60000);
@@ -1087,11 +1161,8 @@ function endRun(reason){
   runActive = false;
   clearTimeout(runTimer);
   clearInterval(popIntervalTimer);
-  if(S.mode === '3'){
-    if(PL && PL.open) closePop(PL);
-    if(PR && PR.open) closePop(PR);
-  }
-  else if(P && P.open) closeVideo();
+  if(PL && PL.open) closePop(PL);
+  if(PR && PR.open) closePop(PR);
   log('run_end', null, reason || 'timeout');
   postToTask('resume');
   var s = computeStats();
@@ -1106,6 +1177,19 @@ function endRun(reason){
   $('endStats').innerHTML = html;
   endScreen.classList.remove('hidden');
   try { downloadCSV(); } catch(e){}
+  try { pushToServer(); } catch(e){}
+}
+function pushToServer(){
+  // Server mode (task.py serve): archive the run server-side as well
+  // (data/events.jsonl + CSV). Silent no-op when opened as file://.
+  if(location.protocol === 'file:') return;
+  try {
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: S.subject, note: S.note, settings: S, rows: rows })
+    }).catch(function(){});
+  } catch(e){}
 }
 function downloadCSV(){
   var head = 't_ms,subject,type,key,value,note';
@@ -1128,6 +1212,73 @@ function refreshVidCount(){
     : tr('vidCount.empty');
 }
 
+/* ================= Video folders (server mode only) ================= */
+function folderMsg(msg, isErr){
+  $('folderMsg').textContent = msg || '';
+  $('folderMsg').style.color = isErr ? '#e06c4f' : '#8fd08f';
+}
+function renderFolders(){
+  if(location.protocol === 'file:'){
+    $('folderList').innerHTML = '<div class="folder-row"><span class="path">' + tr('folders.needsServer') + '</span></div>';
+    return;
+  }
+  fetch('/api/folders').then(function(r){ return r.json(); }).then(function(d){
+    var list = $('folderList'); list.innerHTML = '';
+    (d.folders || []).forEach(function(f){
+      var row = document.createElement('div'); row.className = 'folder-row';
+      var s = document.createElement('span'); s.className = 'path'; s.textContent = f;
+      var rm = document.createElement('button'); rm.textContent = tr('folders.remove');
+      rm.onclick = function(){
+        fetch('/api/folders', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'remove', path: f }) })
+          .then(function(){ renderFolders(); renderPools(); });
+      };
+      row.appendChild(s); row.appendChild(rm); list.appendChild(row);
+    });
+    if(!(d.folders || []).length)
+      list.innerHTML = '<div class="folder-row"><span class="path">' + tr('folders.none') + '</span></div>';
+    renderPools();
+  }).catch(function(){ folderMsg('', false); });
+}
+function renderPools(){
+  if(location.protocol === 'file:') return;
+  fetch('/api/pools').then(function(r){ return r.json(); }).then(function(d){
+    var list = $('poolList'); list.innerHTML = '';
+    (d.pools || []).forEach(function(p){
+      var row = document.createElement('div'); row.className = 'pool-row';
+      var name = document.createElement('span'); name.className = 'name'; name.textContent = p.name;
+      var cnt = document.createElement('span'); cnt.className = 'count'; cnt.textContent = p.videos + ' ' + tr('folders.videos');
+      row.appendChild(name); row.appendChild(cnt);
+      if(p.active){
+        var tag = document.createElement('span'); tag.className = 'active-tag'; tag.textContent = tr('folders.active');
+        row.appendChild(tag);
+      } else {
+        var btn = document.createElement('button'); btn.textContent = p.imported ? tr('folders.use') : tr('folders.import');
+        btn.onclick = function(){
+          folderMsg('', false);
+          fetch('/api/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: p.path }) })
+            .then(function(r){ return r.json(); }).then(function(res){
+              if(res.error){ folderMsg(trFill('folders.error', { msg: res.error }), true); return; }
+              folderMsg(trFill('folders.imported', { name: res.name, n: res.videos }), false);
+              setTimeout(function(){ location.reload(); }, 900);
+            }).catch(function(e){ folderMsg(trFill('folders.error', { msg: String(e) }), true); });
+        };
+        row.appendChild(btn);
+      }
+      list.appendChild(row);
+    });
+    if(!(d.pools || []).length)
+      list.innerHTML = '<div class="folder-row"><span class="path">' + tr('folders.noPools') + '</span></div>';
+  }).catch(function(){});
+}
+function bindAVSliders(){
+  var pairs = [['f_satcenter','v_satcenter'], ['f_volcenter','v_volcenter'],
+               ['f_satreel','v_satreel'], ['f_volreel','v_volreel']];
+  pairs.forEach(function(pair){
+    var slider = $(pair[0]);
+    slider.addEventListener('input', function(){ $(pair[1]).textContent = slider.value + '%'; });
+  });
+}
+
 /* ================= Init ================= */
 (function init(){
   var saved = null;
@@ -1143,6 +1294,28 @@ function refreshVidCount(){
   });
   $('btnDownload').addEventListener('click', downloadCSV);
   $('btnBack').addEventListener('click', function(){ location.reload(); });
+  bindAVSliders();
+  $('btnFolderAdd').addEventListener('click', function(){
+    var path = $('f_folderpath').value.trim();
+    if(!path){ folderMsg('', false); return; }
+    folderMsg('', false);
+    fetch('/api/folders', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'add', path: path }) })
+      .then(function(r){ return r.json(); }).then(function(res){
+        if(res.error){ folderMsg(trFill('folders.error', { msg: res.error }), true); return; }
+        $('f_folderpath').value = '';
+        folderMsg(trFill('folders.scanned', { n: (res.pools || []).length }), false);
+        renderFolders(); renderPools();
+      }).catch(function(e){ folderMsg(trFill('folders.error', { msg: String(e) }), true); });
+  });
+  $('btnFolderScan').addEventListener('click', function(){ renderFolders(); renderPools(); });
+  renderFolders();
+  // CLI auto-start (task.py run): start the experiment without any clicks.
+  // The trigger setting still applies — use --trigger immediate for a fully
+  // hands-off run.
+  var tcfg = (typeof window.TASK_CONFIG !== 'undefined' && window.TASK_CONFIG) || {};
+  if(tcfg.autoStart && !/[?&]manual\b/.test(location.search)){
+    setTimeout(startRun, 400);
+  }
 })();
 
 })();
