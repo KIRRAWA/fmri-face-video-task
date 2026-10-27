@@ -120,6 +120,11 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 .vidProgressBar { height: 100%; width: 0; background: #fff; }
 .videoBox.fake .vidProgressBar { animation: fakebar 8s linear infinite; }
 @keyframes fakebar { from { width: 0; } to { width: 100%; } }
+/* Seek mode: widen the hit area, keep the visual line thin */
+.vidProgress.seekable { height: 16px; background: transparent; cursor: pointer; }
+.vidProgress.seekable .vidProgressBar { position: absolute; bottom: 6px; height: 3px; }
+#centerProgress { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; z-index: 7; cursor: pointer; }
+#centerProgressBar { position: absolute; left: 0; bottom: 6px; height: 3px; width: 0; background: #fff; }
 
 /* Trigger-wait black screen */
 #blackout { position: fixed; inset: 0; background: #000; z-index: 30; display: flex; align-items: center; justify-content: center;
@@ -127,11 +132,19 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
 
 /* End screen */
 #endScreen { position: fixed; inset: 0; background: #111; z-index: 40; display: flex; flex-direction: column;
-             align-items: center; justify-content: center; gap: 20px; }
+             align-items: center; justify-content: safe center; gap: 20px; overflow-y: auto; }
 #endTitle { font-size: 26px; color: #fff; }
-#endStats { font-size: 15px; color: #bbb; text-align: left; line-height: 2; }
-#endStats table { border-collapse: collapse; }
+#endStats { font-size: 15px; color: #bbb; text-align: left; line-height: 2; width: min(560px, 92vw); }
+#endStats table { border-collapse: collapse; width: 100%; }
 #endStats td { padding: 3px 14px 3px 0; }
+/* Per-video list: capped height + internal scroll so a long session can never
+   push the action buttons out of the viewport. Hidden when there is no list. */
+#endList { font-size: 15px; color: #bbb; text-align: left; line-height: 2; width: min(560px, 92vw);
+           max-height: 26vh; overflow-y: auto; border: 1px solid #2a2a2a; border-radius: 6px;
+           padding: 2px 12px 2px 8px; box-sizing: border-box; }
+#endList:empty { display: none; }
+#endList table { border-collapse: collapse; width: 100%; }
+#endList td { padding: 3px 14px 3px 0; }
 </style>
 </head>
 <body>
@@ -256,6 +269,13 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <input type="checkbox" id="f_decor" checked>
         <label for="f_decor" data-i18n="field.decor">Instagram-style decorations (like count · @author · progress bar)</label>
       </div>
+      <div class="field full" style="margin-top:6px">
+        <div class="check-row">
+          <input type="checkbox" id="f_allowseek">
+          <label for="f_allowseek" data-i18n="field.allowSeek">Allow seeking (drag progress bars)</label>
+        </div>
+        <div class="hint" data-i18n="hint.allowSeek"></div>
+      </div>
     </div>
 
     <div id="folderSection">
@@ -299,7 +319,8 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
     <div id="taskArea">
       <iframe id="taskFrame" class="hidden" title="task"></iframe>
       <iframe id="centerVideo" class="hidden" title="center video" allow="autoplay; fullscreen"></iframe>
-      <video id="centerVideoEl" class="hidden" muted loop autoplay playsinline title="center video (local file)"></video>
+      <video id="centerVideoEl" class="hidden" muted loop preload="auto" playsinline title="center video (local file)"></video>
+      <div id="centerProgress" class="hidden"><div id="centerProgressBar"></div></div>
     </div>
     <!-- Left / right pop-up panels -->
     <div id="panelLeft"><div class="panelBox" id="panelBoxL"></div></div>
@@ -311,8 +332,10 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
   <div id="endScreen" class="hidden">
     <div id="endTitle">Experiment complete</div>
     <div id="endStats"></div>
+    <div id="endList"></div>
     <div class="btn-row">
       <button class="btn btn-primary" id="btnDownload" data-i18n="btn.download">Download CSV data</button>
+      <button class="btn btn-ghost" id="btnTimeline" data-i18n="btn.timeline">Download timeline (HTML)</button>
       <button class="btn btn-ghost" id="btnBack" data-i18n="btn.back">Back to settings (press R)</button>
     </div>
   </div>
@@ -378,17 +401,20 @@ var I18N = {
     'field.subject': 'Subject ID',
     'field.note': 'Note (written to CSV)',
     'ph.note': 'e.g. session 1 / run 2',
-    'field.centerAV': 'Center documentary — appearance &amp; audio',
+    'field.centerAV': 'Center documentary — appearance & audio',
     'field.satCenter': 'Saturation',
     'field.volCenter': 'Volume',
-    'hint.centerAV': 'Volume applies to local video files (YouTube embeds stay muted). Saturation 0% = black &amp; white.',
-    'field.reelAV': 'Reels (left/right pop-ups) — appearance &amp; audio',
+    'hint.centerAV': 'Volume applies to local video files (YouTube embeds stay muted). Saturation 0% = black & white.',
+    'field.reelAV': 'Reels (left/right pop-ups) — appearance & audio',
     'field.satReel': 'Saturation',
     'field.volReel': 'Volume',
     'field.decor': 'Instagram-style decorations (like count · @author) — placeholder clips only; real videos show the real @author and like count',
+    'field.allowSeek': 'Allow seeking (drag progress bars)',
+    'hint.allowSeek': 'When enabled, subjects can drag the progress bar to scrub reels and the center video (local file). Dragging is never logged and never affects the session clock.',
     'btn.start': 'Start experiment',
     'btn.fullscreen': 'Fullscreen',
     'btn.download': 'Download CSV data',
+    'btn.timeline': 'Download timeline (HTML)',
     'btn.back': 'Back to settings (press R)',
     'subject.summary': 'Subject instructions (show before the run)',
     'guide.summary': 'Usage Guide (click to open)',
@@ -398,6 +424,7 @@ var I18N = {
     'blackout': 'Waiting for trigger… (key {key})',
     'endTitle.done': 'Experiment complete',
     'endTitle.aborted': 'Aborted · ',
+    'endTitle.manual': 'Ended manually · ',
     'stats.timesOpened': 'Times video opened',
     'stats.scrolls': 'Scrolls (key B)',
     'stats.totalTime': 'Total viewing time',
@@ -463,9 +490,12 @@ var I18N = {
     'field.satReel': '饱和度',
     'field.volReel': '音量',
     'field.decor': 'Instagram 风格装饰（点赞数 · @作者）— 仅占位动画；真实视频显示真实 @作者与点赞数',
+    'field.allowSeek': '允许拖动进度条（调整播放位置）',
+    'hint.allowSeek': '开启后受试者可以拖动进度条调整 reels 和居中视频（本地文件）的播放位置。拖动动作不记日志，也不影响实验计时。',
     'btn.start': '开始实验',
     'btn.fullscreen': '全屏',
     'btn.download': '下载数据 CSV',
+    'btn.timeline': '下载时间线（HTML）',
     'btn.back': '返回设置（按 R 键）',
     'subject.summary': '被试说明（实验前展示）',
     'guide.summary': '使用指南（点击展开）',
@@ -475,6 +505,7 @@ var I18N = {
     'blackout': '等待触发…（键 {key}）',
     'endTitle.done': '实验完成',
     'endTitle.aborted': '提前结束 · ',
+    'endTitle.manual': '手动结束 · ',
     'stats.timesOpened': '打开视频次数',
     'stats.scrolls': '滚动次数（B 键）',
     'stats.totalTime': '总观看时长',
@@ -494,8 +525,8 @@ function trFill(key, map){
 }
 function subjectHTML(){
   return LANG === 'zh'
-    ? '<p style="line-height:1.9">实验过程中，一部纪录片在屏幕中央播放。随时按 <b>A</b> 在左侧或右侧弹出短视频，按 <b>B</b> 看下一条，再按 <b>A</b> 收起弹窗回到任务。是否刷视频、刷多久完全由你决定。任务作答用 <b>1</b> / <b>2</b> 键。</p>'
-    : '<p style="line-height:1.9">A documentary plays in the center of the screen. Press <b>A</b> at any time to pop a short video up on the left or right, press <b>B</b> to go to the next one, and press <b>A</b> again to close the pop-ups and return to the task. Whether and how long you browse is entirely up to you. The task responses use keys <b>1</b> / <b>2</b>.</p>';
+    ? '<p style="line-height:1.9">实验过程中，一部纪录片在屏幕中央播放。随时按 <b>A</b> 在左侧或右侧弹出短视频，按 <b>B</b> 看下一条，再按 <b>A</b> 收起弹窗回到任务。是否刷视频、刷多久完全由你决定。任务作答用 <b>1</b> / <b>2</b> 键。实验者可以提前结束本次实验。</p>'
+    : '<p style="line-height:1.9">A documentary plays in the center of the screen. Press <b>A</b> at any time to pop a short video up on the left or right, press <b>B</b> to go to the next one, and press <b>A</b> again to close the pop-ups and return to the task. Whether and how long you browse is entirely up to you. The task responses use keys <b>1</b> / <b>2</b>. The experimenter may end the session early.</p>';
 }
 function guideHTML(){
   return LANG === 'zh'
@@ -503,32 +534,36 @@ function guideHTML(){
       '<li>调整<b>居中视频</b>、<b>弹出侧与左侧概率</b>、<b>饱和度与音量</b>滑杆及其他参数。</li>' +
       '<li>点击<b>开始实验</b>。触发模式下黑屏，直到按下<b>触发键</b>（默认 <code>5</code>）开始。</li>' +
       '<li>立即体验：<b>任务页面</b>留空即内置占位任务，按 <b>A</b> 弹出视频、<b>B</b> 下一条、再按 <b>A</b> 收起。</li>' +
-      '<li>运行结束（或按 <b>Esc</b>）后，结束页显示统计并自动下载含全部毫秒级事件的 CSV。</li>' +
+      '<li>运行结束（倒计时结束或按 <b>Q</b>）后，结束页显示统计并自动下载含全部毫秒级事件的 CSV 与时间线可视化（HTML）。</li>' +
       '<li>使用真实视频：把 MP4 放进 <code>videos/</code> 并运行 <code>python3 generate_manifest.py</code>；或注册采集器文件夹（<b>视频文件夹</b>）导入 Instagram reels（含作者与点赞数）。</li>' +
       '</ol>' +
       '<table>' +
       '<tr><th>按键</th><th>功能</th></tr>' +
-      '<tr><td>A</td><td>打开 / 关闭视频</td></tr>' +
+      '<tr><td>A</td><td>打开 / 关闭视频（每次打开自动切到下一条）</td></tr>' +
       '<tr><td>B</td><td>下一条视频</td></tr>' +
       '<tr><td>1 / 2</td><td>转发给任务页（人脸任务作答）</td></tr>' +
       '<tr><td>触发键（默认 5）</td><td>黑屏时开始实验</td></tr>' +
-      '<tr><td>Esc</td><td>提前结束（记入日志）</td></tr>' +
+      '<tr><td>Esc</td><td>退出全屏（实验继续，不结束）</td></tr>' +
+      '<tr><td>F4</td><td>重新进入全屏</td></tr>' +
+      '<tr><td>Q</td><td>手动结束实验（保存 CSV + 时间线）</td></tr>' +
       '<tr><td>R</td><td>返回设置（仅结束页）</td></tr>' +
       '</table>'
     : '<ol>' +
       '<li>Adjust the <b>center video</b>, <b>pop-up side / left-side chance</b>, <b>saturation &amp; volume</b> sliders, and the other settings.</li>' +
       '<li>Click <b>Start experiment</b>. In trigger mode the screen stays black until the <b>trigger key</b> (default <code>5</code>).</li>' +
       '<li>Try it now: leave <b>Task page</b> empty to get the built-in placeholder task, then press <b>A</b> to pop a video up, <b>B</b> to scroll, <b>A</b> to close.</li>' +
-      '<li>When the run ends (or you press <b>Esc</b>), an end screen shows statistics and downloads the CSV of all timestamped events.</li>' +
+      '<li>When the run ends (countdown or the <b>Q</b> key), an end screen shows statistics and downloads the CSV of all timestamped events plus a timeline visualization (HTML).</li>' +
       '<li>To use real videos: drop MP4 files into <code>videos/</code> and run <code>python3 generate_manifest.py</code>, or register a collector folder under <b>Video folders</b> to import Instagram reels (author + like count included).</li>' +
       '</ol>' +
       '<table>' +
       '<tr><th>Key</th><th>Action</th></tr>' +
-      '<tr><td>A</td><td>Open / close the video</td></tr>' +
+      '<tr><td>A</td><td>Open / close the video (each open auto-advances to the next one)</td></tr>' +
       '<tr><td>B</td><td>Next video</td></tr>' +
       '<tr><td>1 / 2</td><td>Forwarded to the task page (face-task responses)</td></tr>' +
       '<tr><td>Trigger (default 5)</td><td>Start the run from the black screen</td></tr>' +
-      '<tr><td>Esc</td><td>End the run early (logged)</td></tr>' +
+      '<tr><td>Esc</td><td>Exit fullscreen (the run continues)</td></tr>' +
+      '<tr><td>F4</td><td>Re-enter fullscreen</td></tr>' +
+      '<tr><td>Q</td><td>End the run manually (CSV + timeline saved)</td></tr>' +
       '<tr><td>R</td><td>Back to settings (end screen only)</td></tr>' +
       '</table>';
 }
@@ -601,7 +636,8 @@ var DEFAULTS = {
   decor: true, subject: 'P01', note: '',
   popside: 'random', popleft: 50, poptrigger: 'manual', popinterval: 10,
   centervideo: 'center/center.mp4',
-  satcenter: 100, volcenter: 0, satreel: 100, volreel: 0
+  satcenter: 100, volcenter: 0, satreel: 100, volreel: 0,
+  allowseek: false
 };
 var S = {};
 
@@ -612,10 +648,15 @@ var runActive = false, waitingTrigger = false;
 var taskReady = false;
 var clipList = [], order = [];
 var runTimer = null, popIntervalTimer = null;
+var openClips = {};          // side -> open clip interval {side,name,src,kind,author,likes,startT,reason}
+var t0Wall = null;           // wall-clock ISO time of run start (timeline header)
+var lastTimelineHtml = null; // most recent timeline HTML (end-screen download button)
+var centerMutedFallback = false;   // center started muted due to missing user gesture
 
 /* ================= DOM ================= */
 function $(id){ return document.getElementById(id); }
-var taskFrame = $('taskFrame'), centerVideo = $('centerVideo'), centerVideoEl = $('centerVideoEl');
+var taskFrame = $('taskFrame'), centerVideo = $('centerVideo'), centerVideoEl = $('centerVideoEl'),
+    centerProgress = $('centerProgress');
 var runBody = $('runBody'),
     popL = $('panelLeft'), popR = $('panelRight'),
     panelBoxL = $('panelBoxL'), panelBoxR = $('panelBoxR'),
@@ -638,6 +679,33 @@ function now(){ return Math.round(performance.now() - t0); }
 function log(type, key, value, note){
   if(t0 === null) return;
   rows.push({ t: now(), subject: S.subject, type: type, key: key || '', value: value || '', note: note || '' });
+}
+function readNum(id, fallback, min, max){
+  // Numeric setting read: empty/NaN falls back, 0 is a REAL value (fixes the
+  // old `parseInt(...) || default` bug where saturation 0 became 100).
+  var v = parseFloat($(id).value);
+  if(isNaN(v)) v = fallback;
+  return Math.min(max, Math.max(min, v));
+}
+/* Per-clip view intervals: clip_start/clip_end rows make "which video was
+   watched for how many seconds" answerable from the CSV alone. All times are
+   session-relative milliseconds (performance.now-based, never video progress). */
+function clipStart(side, clip, reason){
+  clipEnd(side, 'replaced');   // defensive: one open interval per side
+  var name = clip && clip.name ? clip.name : '';
+  var o = { side: side, name: name, src: clip && clip.src ? clip.src : '',
+            kind: clip && clip.kind ? clip.kind : '',
+            author: clip && clip.author ? clip.author : '',
+            likes: clip && clip.likes != null ? clip.likes : null,
+            startT: now(), reason: reason || '' };
+  openClips[side] = o;
+  log('clip_start', side, side + '|' + name, JSON.stringify(o));
+}
+function clipEnd(side, reason){
+  var o = openClips[side];
+  if(!o) return;
+  delete openClips[side];
+  log('clip_end', side, side + '|' + o.name, (reason || '') + ' duration_ms=' + (now() - o.startT));
 }
 function shuffle(arr){
   for(var i = arr.length - 1; i > 0; i--){
@@ -702,7 +770,7 @@ function makePlayer(root, label){
   var p = {
     root: root, label: label, open: false,
     videoBox: null, layers: [], activeL: 0, sliding: false, slideTimer: null,
-    curIdx: -1, curClip: null, startIdx: 0, onEnded: null
+    curIdx: -1, curClip: null, startIdx: 0, onEnded: null, _raf: null
   };
   p.build = function(){
     p.videoBox = document.createElement('div');
@@ -742,6 +810,41 @@ function makePlayer(root, label){
           p.videoBox.querySelector('.vidProgressBar').style.width = (L.video.currentTime / L.video.duration * 100) + '%';
       });
     });
+    // Draggable progress bar (only when seeking is allowed). Seeking is a
+    // visual convenience for the subject — it is NEVER logged.
+    if(S.allowseek){
+      var track = p.videoBox.querySelector('.vidProgress');
+      track.classList.add('seekable');
+      var seeking = false, wasPlaying = false;
+      function fracOf(ev){
+        var r = track.getBoundingClientRect();
+        if(r.width <= 0) return 0;
+        return Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      }
+      track.addEventListener('pointerdown', function(ev){
+        var L = p.layers[p.activeL];
+        if(!L.clip || L.clip.kind !== 'file' || !isFinite(L.video.duration) || L.video.duration <= 0) return;
+        ev.preventDefault(); ev.stopPropagation();
+        seeking = true; wasPlaying = !L.video.paused;
+        try { track.setPointerCapture(ev.pointerId); } catch(e){}
+        L.video.pause();
+        L.video.currentTime = fracOf(ev) * L.video.duration;
+      });
+      track.addEventListener('pointermove', function(ev){
+        if(!seeking) return;
+        var L = p.layers[p.activeL];
+        L.video.currentTime = fracOf(ev) * L.video.duration;
+      });
+      function endSeek(ev){
+        if(!seeking) return;
+        seeking = false;
+        try { track.releasePointerCapture(ev.pointerId); } catch(e){}
+        var L = p.layers[p.activeL];
+        if(wasPlaying) L.video.play().catch(function(){});
+      }
+      track.addEventListener('pointerup', endSeek);
+      track.addEventListener('pointercancel', endSeek);
+    }
   };
   p.applyAV = function(L){
     // Reel saturation + volume settings: saturate() on the video/canvas,
@@ -823,9 +926,18 @@ function makePlayer(root, label){
     g.fillText(L.clip.caption, ox + vw / 2, vh * 0.9);
   };
   p.loop = function(ts){
+    p._raf = null;   // this frame's callback has finished
     if(!p.open || !p.curClip || p.curClip.kind !== 'fake' || p.sliding) return;
     p.drawFake(ts, p.layers[p.activeL]);
-    requestAnimationFrame(p.loop);
+    p._raf = requestAnimationFrame(p.loop);
+  };
+  p.startLoop = function(){
+    // Guarded restart: exactly one rAF chain per player (fixes the frozen
+    // first placeholder frame, which only drew once and never animated).
+    if(p._raf === null) p._raf = requestAnimationFrame(p.loop);
+  };
+  p.stopLoop = function(){
+    if(p._raf !== null){ cancelAnimationFrame(p._raf); p._raf = null; }
   };
   p.prepareLayer = function(L, clip){
     L.clip = clip;
@@ -839,19 +951,24 @@ function makePlayer(root, label){
       p.drawFake(performance.now(), L);
     }
   };
-  p.showClip = function(clip, withSlide){
+  p.showClip = function(clip, withSlide, reason){
+    clipEnd(p.label, 'switch');      // the previous clip's viewing interval ends
     p.curClip = clip;
     p.updateDecor();
     if(!withSlide){
       p.prepareLayer(p.layers[p.activeL], clip);   // first clip: appear in place, no motion
+      if(clip.kind === 'fake') p.startLoop();
+      clipStart(p.label, clip, reason || 'show');
       return;
     }
+    p.stopLoop();
     var L = p.layers[1 - p.activeL];
     p.prepareLayer(L, clip);
     p.sliding = true;
     L.el.style.transform = 'translateY(0)';                        // incoming rises from below
     p.layers[p.activeL].el.style.transform = 'translateY(-100%)';  // outgoing exits upward
     p.slideTimer = setTimeout(function(){ p.completeSlide(false); }, 320);
+    clipStart(p.label, clip, reason || 'show');   // visible the moment the slide starts
   };
   p.completeSlide = function(snap){
     if(!p.sliding) return;
@@ -870,7 +987,7 @@ function makePlayer(root, label){
     outL.el.style.transition = '';
     p.activeL = 1 - p.activeL;                      // incoming becomes the active layer
     if(!p.open) return;
-    if(p.curClip.kind === 'fake') requestAnimationFrame(p.loop);
+    if(p.curClip.kind === 'fake') p.startLoop();
     if(inL.video.error) p.next();                   // incoming failed to load — skip ahead
   };
   p.next = function(){
@@ -879,27 +996,29 @@ function makePlayer(root, label){
     p.curIdx = (p.curIdx + 1) % order.length;
     var cl = clipList[order[p.curIdx]];
     log('video_next', p.label, cl.name, 'author=' + (cl.author || '') + ' likes=' + (cl.likes == null ? '' : cl.likes));
-    p.showClip(cl, true);
+    p.showClip(cl, true, 'next');
   };
   p.openPanel = function(){
     if(p.open) return;
     p.open = true;
     if(!p.curClip){
       p.curIdx = p.startIdx;
-      var cl0 = clipList[order[p.curIdx]];
-      log('video_next', p.label, cl0.name, 'author=' + (cl0.author || '') + ' likes=' + (cl0.likes == null ? '' : cl0.likes));
-      p.showClip(cl0, false);
-    } else if(p.curClip.kind === 'file'){
-      p.layers[p.activeL].video.play().catch(function(){});
+      p.showClip(clipList[order[p.curIdx]], false, 'open_first');
     } else {
-      requestAnimationFrame(p.loop);   // placeholder clips: resume drawing on reopen
+      // Every open auto-advances to the NEXT clip (position + 1, wraps around,
+      // repeats allowed) — never resumes the previously watched video.
+      p.curIdx = (p.curIdx + 1) % order.length;
+      p.showClip(clipList[order[p.curIdx]], true, 'open_advance');
     }
     log('video_open', p.label, p.curClip.name);
   };
   p.closePanel = function(){
     if(!p.open) return;
+    if(p.sliding){ clearTimeout(p.slideTimer); p.completeSlide(true); }   // settle an in-flight slide
+    clipEnd(p.label, 'close');
     log('video_close', p.label, p.curClip ? p.curClip.name : '');
     p.open = false;
+    p.stopLoop();
     p.layers.forEach(function(L){ L.video.pause(); });
   };
   return p;
@@ -929,8 +1048,9 @@ function closePop(p){
 }
 function pickSide(){
   // Random mode honors the left-side percentage setting: P(left) = popleft%.
+  // (popleft is always a number now — 0 is a real value, so no || fallback.)
   if(S.popside === 'random')
-    return (Math.random() * 100) < (S.popleft || 50) ? 'left' : 'right';
+    return (Math.random() * 100) < S.popleft ? 'left' : 'right';
   return S.popside;
 }
 function togglePop(){
@@ -977,27 +1097,105 @@ function placeholderHTML(){
     '<\/scr' + 'ipt></body></html>'
   );
 }
-function toEmbedUrl(url){
-  // watch?v= / youtu.be / shorts / embed links → official embed player
+function toEmbedUrl(url, autoplay){
+  // watch?v= / youtu.be / shorts / embed links → official embed player.
+  // autoplay=false keeps the preloaded embed PAUSED until the trigger.
   var m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
   if(!m) return url;   // not a recognizable YouTube link — use as-is
-  return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1&mute=1&loop=1&playlist=' + m[1] + '&rel=0&playsinline=1';
+  return 'https://www.youtube.com/embed/' + m[1] + '?autoplay=' + (autoplay ? 1 : 0) +
+         '&mute=1&loop=1&playlist=' + m[1] + '&rel=0&playsinline=1&enablejsapi=1';
+}
+function ytCommand(func){
+  try {
+    centerVideo.contentWindow.postMessage(
+      JSON.stringify({ event: 'command', func: func, args: [] }), '*');
+  } catch(e){}
+}
+function centerName(){
+  var m = String(S.centervideo || '').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+  if(m) return 'youtube:' + m[1];
+  return String(S.centervideo).split('/').pop();
+}
+function startCenter(){
+  // Called from beginRun: the center documentary starts ONLY at the trigger
+  // (no playback or sound before the run begins).
+  if(!S.centervideo) return;
+  var vc = (S.volcenter || 0) / 100;
+  if(!centerVideoEl.classList.contains('hidden')){   // local file
+    centerVideoEl.volume = vc; centerVideoEl.muted = vc === 0;
+    var pr = centerVideoEl.play();
+    if(pr && pr.catch) pr.catch(function(){
+      // No user gesture yet (--trigger immediate): retry muted and unmute on
+      // the next keydown, which counts as a gesture.
+      centerVideoEl.muted = true;
+      centerMutedFallback = true;
+      centerVideoEl.play().catch(function(){});
+    });
+  } else if(!centerVideo.classList.contains('hidden')){
+    ytCommand('playVideo');
+  }
+}
+function stopCenter(){
+  if(!centerVideoEl.classList.contains('hidden')) centerVideoEl.pause();
+  if(!centerVideo.classList.contains('hidden')) ytCommand('pauseVideo');
+}
+var centerSeekBound = false;
+function bindCenterSeek(){
+  // Draggable progress bar for the local center video. Seeking is a visual
+  // convenience for the subject — it is NEVER logged.
+  var track = centerProgress;
+  var seeking = false, wasPlaying = false;
+  function fracOf(ev){
+    var r = track.getBoundingClientRect();
+    if(r.width <= 0) return 0;
+    return Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  }
+  track.addEventListener('pointerdown', function(ev){
+    if(!isFinite(centerVideoEl.duration) || centerVideoEl.duration <= 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    seeking = true; wasPlaying = !centerVideoEl.paused;
+    try { track.setPointerCapture(ev.pointerId); } catch(e){}
+    centerVideoEl.pause();
+    centerVideoEl.currentTime = fracOf(ev) * centerVideoEl.duration;
+  });
+  track.addEventListener('pointermove', function(ev){
+    if(!seeking) return;
+    centerVideoEl.currentTime = fracOf(ev) * centerVideoEl.duration;
+  });
+  function endSeek(ev){
+    if(!seeking) return;
+    seeking = false;
+    try { track.releasePointerCapture(ev.pointerId); } catch(e){}
+    if(wasPlaying) centerVideoEl.play().catch(function(){});
+  }
+  track.addEventListener('pointerup', endSeek);
+  track.addEventListener('pointercancel', endSeek);
+  centerVideoEl.addEventListener('timeupdate', function(){
+    if(centerVideoEl.duration > 0)
+      $('centerProgressBar').style.width = (centerVideoEl.currentTime / centerVideoEl.duration * 100) + '%';
+  });
+  centerSeekBound = true;
 }
 function setupTaskArea(){
   centerVideo.classList.add('hidden');
   centerVideoEl.classList.add('hidden');
+  centerProgress.classList.add('hidden');
   if(S.centervideo){
-    // Video file (local path or direct .mp4/.webm URL) → <video> element:
-    // autoplays muted and works offline. YouTube/other web links → iframe
-    // (YouTube URLs are converted to embeds by toEmbedUrl).
+    // Video file (local path or direct .mp4/.webm URL) → <video> element,
+    // preloaded but NOT played: playback starts at the trigger (beginRun).
+    // YouTube/other web links → iframe (paused embed, started via postMessage).
     if(!/^https?:\/\//.test(S.centervideo) || /\.(mp4|webm|m4v|mov)([?#]|$)/i.test(S.centervideo)){
+      centerVideoEl.autoplay = false;
+      centerVideoEl.pause();
       centerVideoEl.src = S.centervideo;
-      centerVideoEl.classList.remove('hidden');
+      centerVideoEl.load();
       var vc = (S.volcenter || 0) / 100;
       centerVideoEl.volume = vc; centerVideoEl.muted = vc === 0;
-      centerVideoEl.play().catch(function(){});
+      centerVideoEl.classList.remove('hidden');
+      if(S.allowseek && !centerSeekBound) bindCenterSeek();
+      centerProgress.classList.toggle('hidden', !S.allowseek);
     } else {
-      centerVideo.src = toEmbedUrl(S.centervideo);
+      centerVideo.src = toEmbedUrl(S.centervideo, false);
       centerVideo.classList.remove('hidden');
     }
     // Center-documentary saturation (YouTube embeds stay muted).
@@ -1026,8 +1224,34 @@ window.addEventListener('message', function(ev){
   }
 });
 
+/* ================= Fullscreen helpers ================= */
+function isFullscreen(){
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function enterFullscreen(){
+  var el = document.documentElement;
+  var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  if(!fn || isFullscreen()) return;
+  try { var p = fn.call(el); if(p && p.catch) p.catch(function(){}); } catch(e){}
+}
+function exitFullscreen(){
+  var fn = document.exitFullscreen || document.webkitExitFullscreen;
+  if(!fn) return;
+  try { var p = fn.call(document); if(p && p.catch) p.catch(function(){}); } catch(e){}
+}
+var autoFsPending = false;
+function maybeAutoFullscreen(){
+  // CLI launch (task.py run --fullscreen) opens the browser window with
+  // --start-fullscreen, so the viewport already fills the screen; only ask the
+  // DOM fullscreen API when it does not (a keydown/click grants permission).
+  if(!autoFsPending || isFullscreen()) return;
+  if(window.innerHeight >= window.screen.height - 2 && window.innerWidth >= window.screen.width - 2) return;
+  enterFullscreen();
+}
+
 /* ================= Key routing (this page always owns the keyboard) ================= */
 window.addEventListener('keydown', function(e){
+  maybeAutoFullscreen();
   var k = e.key ? e.key.toLowerCase() : '';
   if(waitingTrigger){
     if(k === S.triggerkey.toLowerCase()){
@@ -1035,13 +1259,19 @@ window.addEventListener('keydown', function(e){
       beginRun();
       log('trigger', S.triggerkey);
     } else if(k === 'escape'){
-      location.reload();   // cancel waiting, back to settings
+      if(isFullscreen()) exitFullscreen();   // first Esc: leave fullscreen
+      else location.reload();                // second Esc: cancel the wait
     }
     return;
   }
   if(!runActive){
     if(endScreen && !endScreen.classList.contains('hidden') && k === 'r') location.reload();
     return;
+  }
+  if(centerMutedFallback){
+    // Unmute the center video on the first user gesture after a muted fallback.
+    centerMutedFallback = false;
+    if((S.volcenter || 0) > 0 && !centerVideoEl.classList.contains('hidden')) centerVideoEl.muted = false;
   }
   log('key', k, null, e.repeat ? 'repeat' : 'press');
   if(e.repeat) return;
@@ -1052,7 +1282,9 @@ window.addEventListener('keydown', function(e){
     if(PL && PL.open) PL.next();
     if(PR && PR.open) PR.next();
   }
-  else if(k === 'escape') endRun('abort');
+  else if(k === 'escape'){ if(isFullscreen()) exitFullscreen(); }   // never ends the run
+  else if(k === 'f4') enterFullscreen();
+  else if(k === 'q') endRun('manual');
   else postToTask('key', { key: k });
 });
 
@@ -1061,23 +1293,24 @@ function readSettings(){
   S = {
     videosource: $('f_videosource').value,
     tasksrc: $('f_tasksrc').value.trim(),
-    durationMin: Math.max(0.1, parseFloat($('f_duration').value) || 10),
+    durationMin: Math.max(0.1, readNum('f_duration', 10, 0.1, 1440)),
     trigger: $('f_trigger').value,
     triggerkey: ($('f_triggerkey').value.trim() || '5').toLowerCase(),
     keya: ($('f_keya').value.trim() || 'a').toLowerCase(),
     keyb: ($('f_keyb').value.trim() || 'b').toLowerCase(),
     decor: $('f_decor').checked,
+    allowseek: $('f_allowseek').checked,
     subject: $('f_subject').value.trim() || 'P01',
     note: $('f_note').value.trim(),
     popside: $('f_popsid').value,
-    popleft: Math.min(100, Math.max(0, parseFloat($('f_popleft').value) || 50)),
+    popleft: readNum('f_popleft', 50, 0, 100),
     poptrigger: $('f_poptrigger').value,
-    popinterval: Math.max(2, parseFloat($('f_popinterval').value) || 10),
+    popinterval: Math.max(2, readNum('f_popinterval', 10, 2, 3600)),
     centervideo: $('f_centervideo').value.trim(),
-    satcenter: Math.min(200, Math.max(0, parseInt($('f_satcenter').value, 10) || 100)),
-    volcenter: Math.min(100, Math.max(0, parseInt($('f_volcenter').value, 10) || 0)),
-    satreel: Math.min(200, Math.max(0, parseInt($('f_satreel').value, 10) || 100)),
-    volreel: Math.min(100, Math.max(0, parseInt($('f_volreel').value, 10) || 0))
+    satcenter: readNum('f_satcenter', 100, 0, 200),
+    volcenter: readNum('f_volcenter', 0, 0, 100),
+    satreel: readNum('f_satreel', 100, 0, 200),
+    volreel: readNum('f_volreel', 0, 0, 100)
   };
 }
 function saveSettings(){ try { localStorage.setItem('fmri-video-task-settings', JSON.stringify(S)); } catch(e){} }
@@ -1096,7 +1329,8 @@ function loadSettings(){
   $('f_duration').value = d.durationMin;
   $('f_trigger').value = d.trigger; $('f_triggerkey').value = d.triggerkey;
   $('f_keya').value = d.keya; $('f_keyb').value = d.keyb;
-  $('f_decor').checked = d.decor; $('f_subject').value = d.subject; $('f_note').value = d.note;
+  $('f_decor').checked = d.decor; $('f_allowseek').checked = !!d.allowseek;
+  $('f_subject').value = d.subject; $('f_note').value = d.note;
   $('f_popsid').value = d.popside; $('f_popleft').value = d.popleft;
   $('f_poptrigger').value = d.poptrigger;
   $('f_popinterval').value = d.popinterval; $('f_centervideo').value = d.centervideo;
@@ -1128,31 +1362,83 @@ function startRun(){
 }
 function beginRun(){
   t0 = performance.now();
+  t0Wall = new Date().toISOString();
   blackout.classList.add('hidden');
   runActive = true;
   log('session_start', null, null, 'videosource=' + S.videosource + ' durationMin=' + S.durationMin +
-      ' decor=' + S.decor + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
+      ' decor=' + S.decor + ' allowseek=' + S.allowseek + ' tasksrc=' + (S.tasksrc || '(placeholder)') +
       ' popside=' + S.popside + ' popleft=' + S.popleft + ' poptrigger=' + S.poptrigger +
       ' centervideo=' + (S.centervideo || '(none)') +
       ' satcenter=' + S.satcenter + ' volcenter=' + S.volcenter +
       ' satreel=' + S.satreel + ' volreel=' + S.volreel + ' note=' + S.note);
+  startCenter();
+  if(S.centervideo){
+    clipStart('center', { name: centerName(), src: S.centervideo,
+                          kind: centerVideoEl.classList.contains('hidden') ? 'youtube' : 'file',
+                          author: '', likes: null }, 'begin');
+  }
   if(S.poptrigger === 'auto'){
     popIntervalTimer = setInterval(function(){ if(runActive) popAuto(); }, S.popinterval * 1000);
   }
   runTimer = setTimeout(function(){ endRun('timeout'); }, S.durationMin * 60000);
 }
-function computeStats(){
-  var openCount = 0, scrollCount = 0, totalMs = 0, perName = {};
-  var openT = null, openName = '';
+function clipIntervals(){
+  // Pair clip_start/clip_end rows into per-side view intervals. A new start on
+  // the same side implicitly closes the previous interval; anything still open
+  // at the last event is closed there.
+  var ivs = [], open = {}, lastT = rows.length ? rows[rows.length - 1].t : 0;
   for(var i = 0; i < rows.length; i++){
     var r = rows[i];
-    if(r.type === 'video_open') openCount++;
-    if(r.type === 'video_next') scrollCount++;
-    if(r.type === 'video_open'){ openT = r.t; openName = r.value; }
-    else if(r.type === 'video_close' && openT !== null){
-      var d = r.t - openT;
-      totalMs += d; perName[openName] = (perName[openName] || 0) + d; openT = null;
+    if(r.type === 'clip_start'){
+      var meta = {};
+      try { meta = JSON.parse(r.note || '{}') || {}; } catch(e){ meta = {}; }
+      if(!meta.name) meta.name = String(r.value || '').split('|').slice(1).join('|');
+      var side = r.key || meta.side || '?';
+      if(open[side]){
+        open[side].end = r.t; open[side].endReason = 'replaced';
+        ivs.push(open[side]);
+      }
+      open[side] = { side: side, name: meta.name || '', src: meta.src || '',
+                     kind: meta.kind || '', author: meta.author || '', likes: meta.likes,
+                     start: r.t, startReason: meta.reason || '', end: null, endReason: null };
+    } else if(r.type === 'clip_end'){
+      var s2 = r.key || '?';
+      if(open[s2]){
+        open[s2].end = r.t;
+        open[s2].endReason = String(r.note || '').split(' ')[0];
+        ivs.push(open[s2]);
+        delete open[s2];
+      }
     }
+  }
+  for(var s3 in open){
+    open[s3].end = lastT; open[s3].endReason = 'missing_end';
+    ivs.push(open[s3]);
+  }
+  return ivs;
+}
+function computeStats(){
+  var openCount = 0, scrollCount = 0, perName = {};
+  var ivs = clipIntervals();
+  ivs.forEach(function(iv){
+    var d = Math.max(0, iv.end - iv.start);
+    perName[iv.name] = (perName[iv.name] || 0) + d;
+  });
+  // Total reel viewing time = union of left/right intervals (both panels open
+  // simultaneously must not double-count).
+  var reelIvs = ivs.filter(function(iv){ return iv.side === 'left' || iv.side === 'right'; })
+                   .map(function(iv){ return { s: iv.start, e: iv.end }; })
+                   .sort(function(a, b){ return a.s - b.s; });
+  var totalMs = 0, curS = null, curE = null;
+  reelIvs.forEach(function(iv){
+    if(curS === null){ curS = iv.s; curE = iv.e; }
+    else if(iv.s <= curE){ if(iv.e > curE) curE = iv.e; }
+    else { totalMs += curE - curS; curS = iv.s; curE = iv.e; }
+  });
+  if(curS !== null) totalMs += curE - curS;
+  for(var i = 0; i < rows.length; i++){
+    if(rows[i].type === 'video_open') openCount++;
+    if(rows[i].type === 'video_next') scrollCount++;
   }
   return { openCount: openCount, scrollCount: scrollCount, totalMs: totalMs, perName: perName };
 }
@@ -1163,31 +1449,47 @@ function endRun(reason){
   clearInterval(popIntervalTimer);
   if(PL && PL.open) closePop(PL);
   if(PR && PR.open) closePop(PR);
+  stopCenter();
+  clipEnd('center', 'run_end');
   log('run_end', null, reason || 'timeout');
   postToTask('resume');
   var s = computeStats();
-  $('endTitle').textContent = (reason === 'abort' ? tr('endTitle.aborted') : '') + tr('endTitle.done');
+  $('endTitle').textContent = (reason === 'manual' ? tr('endTitle.manual') : '') + tr('endTitle.done');
   var html = '<table><tr><td>' + tr('stats.timesOpened') + '</td><td><b>' + s.openCount + '</b></td></tr>' +
              '<tr><td>' + tr('stats.scrolls') + '</td><td><b>' + s.scrollCount + '</b></td></tr>' +
-             '<tr><td>' + tr('stats.totalTime') + '</td><td><b>' + (s.totalMs / 1000).toFixed(1) + ' s</b></td></tr>';
-  for(var n in s.perName){
-    html += '<tr><td>· ' + n + '</td><td>' + (s.perName[n] / 1000).toFixed(1) + ' s</td></tr>';
-  }
-  html += '<tr><td>' + tr('stats.totalEvents') + '</td><td><b>' + rows.length + '</b></td></tr></table>';
+             '<tr><td>' + tr('stats.totalTime') + '</td><td><b>' + (s.totalMs / 1000).toFixed(1) + ' s</b></td></tr>' +
+             '<tr><td>' + tr('stats.totalEvents') + '</td><td><b>' + rows.length + '</b></td></tr></table>';
   $('endStats').innerHTML = html;
+  // Per-video list goes into its own capped, scrollable box so a long session
+  // can never push the action buttons out of the viewport.
+  var list = '';
+  if(Object.keys(s.perName).length){
+    list = '<table>';
+    for(var n in s.perName){
+      list += '<tr><td>· ' + n + '</td><td>' + (s.perName[n] / 1000).toFixed(1) + ' s</td></tr>';
+    }
+    list += '</table>';
+  }
+  $('endList').innerHTML = list;
   endScreen.classList.remove('hidden');
   try { downloadCSV(); } catch(e){}
-  try { pushToServer(); } catch(e){}
+  try { lastTimelineHtml = buildTimelineHTML(reason); } catch(e){ lastTimelineHtml = null; }
+  try { setTimeout(function(){ downloadTimeline(); }, 800); } catch(e){}
+  try { pushToServer(reason); } catch(e){}
 }
-function pushToServer(){
+function pushToServer(reason){
   // Server mode (task.py serve): archive the run server-side as well
-  // (data/events.jsonl + CSV). Silent no-op when opened as file://.
+  // (data/events.jsonl + CSV + timeline HTML). Silent no-op on file://.
   if(location.protocol === 'file:') return;
   try {
     fetch('/api/events', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: S.subject, note: S.note, settings: S, rows: rows })
+      body: JSON.stringify({
+        subject: S.subject, note: S.note, settings: S, rows: rows,
+        timelineHtml: lastTimelineHtml || '',
+        startedAt: t0Wall, endedAt: new Date().toISOString(), endReason: reason
+      })
     }).catch(function(){});
   } catch(e){}
 }
@@ -1203,6 +1505,462 @@ function downloadCSV(){
   a.download = (S.subject || 'subj') + '_' + stamp + '.csv';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
+}
+function downloadTimeline(){
+  // Self-contained timeline HTML (auto-downloaded at every run end; the
+  // end-screen button re-downloads it if the browser blocked the automatic one).
+  if(!lastTimelineHtml) return;
+  var blob = new Blob([lastTimelineHtml], { type: 'text/html;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  var stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.download = (S.subject || 'subj') + '_' + stamp + '_timeline.html';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
+}
+function buildTimelineHTML(reason){
+  // Build a self-contained, zero-dependency timeline page (inline CSS + JS, data
+  // embedded as JSON) from this run's event rows. Called at every run end; also
+  // archived by task.py via /api/events. All untrusted metadata (clip names,
+  // authors, captions) travels through the JSON payload and DOM textContent in
+  // the generated page - never through HTML/SVG string interpolation.
+  var ivs = clipIntervals();
+  var runMs = rows.length ? rows[rows.length - 1].t : 0;
+  var stats = computeStats();
+  var intervals = ivs.map(function(iv){
+    var frameCode = '';
+    var url = '';
+    if(iv.side === 'left' || iv.side === 'right'){
+      var stem = String(iv.name || '').replace(/\.[A-Za-z0-9]+$/, '');
+      if(/^[A-Za-z0-9_-]{6,}$/.test(stem)) frameCode = stem;
+      // Click-to-open link: Instagram shortcodes are rebuilt into reel URLs;
+      // other sources link only when the stored src is already an Instagram URL.
+      if(frameCode) url = 'https://www.instagram.com/reel/' + frameCode + '/';
+      else if(/^https?:\/\/[^\/]*instagram\.com\//i.test(String(iv.src || ''))) url = String(iv.src);
+    }
+    return { side: iv.side, name: iv.name || '(unnamed)', src: iv.src || '',
+             kind: iv.kind || '', author: iv.author || '', likes: iv.likes,
+             start: iv.start, end: iv.end, reason: iv.endReason || '',
+             frameCode: frameCode, url: url };
+  });
+  var actions = [], panels = [], openPanels = {};
+  for(var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if(r.type === 'trigger') actions.push({ t: r.t, kind: 'trigger', label: 'Trigger (' + String(S.triggerkey).toUpperCase() + ')' });
+    else if(r.type === 'popup_manual') actions.push({ t: r.t, kind: 'popup_manual', label: 'Open/close (' + String(S.keya).toUpperCase() + ')' });
+    else if(r.type === 'video_next') actions.push({ t: r.t, kind: 'video_next', label: 'Next (' + String(S.keyb).toUpperCase() + ')' });
+    else if(r.type === 'popup_auto') actions.push({ t: r.t, kind: 'popup_auto', label: 'Auto popup' });
+    else if(r.type === 'run_end') actions.push({ t: r.t, kind: 'run_end', label: 'End of run' });
+    else if(r.type === 'video_open') openPanels[r.key] = r.t;
+    else if(r.type === 'video_close' && openPanels[r.key] != null){
+      panels.push({ side: r.key, s: openPanels[r.key], e: r.t });
+      delete openPanels[r.key];
+    }
+  }
+  for(var s in openPanels) panels.push({ side: s, s: openPanels[s], e: runMs });
+  var hasCenter = intervals.some(function(iv){ return iv.side === 'center'; });
+  var hasLeft = intervals.some(function(iv){ return iv.side === 'left'; }) || panels.some(function(p){ return p.side === 'left'; });
+  var hasRight = intervals.some(function(iv){ return iv.side === 'right'; }) || panels.some(function(p){ return p.side === 'right'; });
+  var DATA = {
+    subject: S.subject || '', note: S.note || '',
+    startedAt: t0Wall, endedAt: new Date().toISOString(),
+    runMs: runMs, endReason: reason || 'timeout',
+    served: location.protocol !== 'file:',
+    hasCenter: hasCenter, hasLeft: hasLeft, hasRight: hasRight,
+    stats: { viewMs: stats.totalMs, opens: stats.openCount, scrolls: stats.scrollCount, intervals: intervals.length },
+    intervals: intervals, actions: actions, panels: panels
+  };
+  var dataJson = JSON.stringify(DATA)
+      .replace(/</g, '\\u003c')
+      .split(String.fromCharCode(8232)).join('\\u2028')
+      .split(String.fromCharCode(8233)).join('\\u2029');
+  // Renderer page. Written as single-quoted fragments (double quotes inside);
+  // the closing script tag is split so it never terminates this script block.
+  var R = [
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head>',
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    '<title>Run timeline</title>',
+    '<style>',
+    'html,body{margin:0;padding:0;background:#0d0d0d;color:#ffffff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}',
+    'header{padding:18px 20px 6px;border-bottom:1px solid rgba(255,255,255,0.10);}',
+    'h1{font-size:19px;margin:0 0 6px;font-weight:600;}',
+    '#meta{font-size:13px;color:#c3c2b7;line-height:1.6;max-width:1100px;}',
+    '#meta b{color:#ffffff;font-weight:600;}',
+    '#chips{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;}',
+    '.chip{font-size:12px;color:#c3c2b7;border:1px solid rgba(255,255,255,0.10);border-radius:12px;padding:3px 10px;}',
+    '.chip b{color:#ffffff;font-variant-numeric:tabular-nums;}',
+    '#bar{display:flex;align-items:center;gap:10px;padding:10px 20px 4px;flex-wrap:wrap;}',
+    '#legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#c3c2b7;flex:1;}',
+    '.lg{display:inline-flex;align-items:center;gap:6px;}',
+    '.sw{width:10px;height:10px;border-radius:3px;display:inline-block;}',
+    '#zoomHint{font-size:12px;color:#898781;}',
+    'button{font-size:12px;color:#ffffff;background:#2c2c2a;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:4px 12px;cursor:pointer;}',
+    'button:hover{background:#383835;}',
+    '#chartWrap{position:relative;display:flex;flex-direction:column;margin:0 12px 12px;background:#1a1a19;border:1px solid rgba(255,255,255,0.10);border-radius:8px;overflow:hidden;}',
+    '#dragStrip{flex:0 0 16px;display:flex;align-items:center;justify-content:center;gap:4px;cursor:move;background:#1f1f1e;border-bottom:1px solid rgba(255,255,255,0.08);}',
+    '.ddot{width:4px;height:4px;border-radius:50%;background:#898781;}',
+    '#chart{display:block;}',
+    '#tip{position:absolute;z-index:5;pointer-events:none;background:#2c2c2a;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:8px 10px;font-size:12px;color:#c3c2b7;max-width:320px;display:none;}',
+    '#tip .tname{color:#ffffff;font-weight:600;font-size:13px;margin-bottom:4px;}',
+    '#tip img{display:block;margin-top:6px;max-width:220px;max-height:140px;border-radius:4px;}',
+    '#tip .tiplink{margin-top:6px;font-size:11px;color:#c3c2b7;}',
+    '.tiprow{display:flex;justify-content:space-between;gap:14px;line-height:1.7;}',
+    '.tiprow .tipk{color:#898781;}',
+    '.tiprow .tipv{color:#c3c2b7;font-variant-numeric:tabular-nums;text-align:right;}',
+    '#tableBox{margin:4px 20px 24px;}',
+    'details summary{cursor:pointer;font-size:13px;color:#c3c2b7;margin-bottom:8px;}',
+    'table{border-collapse:collapse;font-size:12px;width:100%;max-width:960px;}',
+    'th,td{text-align:left;padding:4px 10px;border-bottom:1px solid #2c2c2a;}',
+    'th{color:#898781;font-weight:500;}',
+    'td{color:#c3c2b7;font-variant-numeric:tabular-nums;}',
+    '#empty{color:#898781;font-size:13px;padding:30px 20px;display:none;}',
+    '</style>',
+    '</head>',
+    '<body>',
+    '<header>',
+    '<h1>Run timeline</h1>',
+    '<div id="meta"></div>',
+    '<div id="chips"></div>',
+    '</header>',
+    '<div id="bar">',
+    '<div id="legend"></div>',
+    '<span id="zoomHint">Arrow keys pan &amp; zoom &middot; scroll zooms at cursor &middot; drag the strip to move the chart</span>',
+    '<button id="fitBtn" type="button">Fit</button>',
+    '<button id="hideDataBtn" type="button">Hide data</button>',
+    '<button id="pinBtn" type="button" style="display:none">Pin back</button>',
+    '</div>',
+    '<div id="chartWrap"><div id="dragStrip" title="Drag to move the chart"><span class="ddot"></span><span class="ddot"></span><span class="ddot"></span><span class="ddot"></span><span class="ddot"></span></div><svg id="chart"></svg><div id="tip"></div></div>',
+    '<div id="empty">No viewing intervals were recorded for this run.</div>',
+    '<div id="tableBox">',
+    '<details>',
+    '<summary>Data table</summary>',
+    '<table>',
+    '<thead><tr><th>Name</th><th>Lane</th><th>Start</th><th>End</th><th>Duration</th><th>Author</th><th>Likes</th><th>End reason</th></tr></thead>',
+    '<tbody id="tbody"></tbody>',
+    '</table>',
+    '</details>',
+    '</div>',
+    '<script type="application/json" id="tdata">' + dataJson + '</scr' + 'ipt>',
+    '<scr' + 'ipt>',
+    '(function(){',
+    'var DATA = JSON.parse(document.getElementById("tdata").textContent);',
+    'var LANES = [];',
+    'if(DATA.hasCenter) LANES.push({key:"center", label:"Center", color:"#3987e5"});',
+    'if(DATA.hasLeft) LANES.push({key:"left", label:"Left reel", color:"#d95926"});',
+    'if(DATA.hasRight) LANES.push({key:"right", label:"Right reel", color:"#199e70"});',
+    'LANES.push({key:"actions", label:"Actions", color:"#c3c2b7"});',
+    'var GUTTER = 118, ROW_H = 26, GAP = 10, TOP = 10, AXIS_H = 30, STRIP_H = 16;',
+    'var MIN_SPAN = 2000;',
+    'var SPAN_MAX = Math.max(DATA.runMs, MIN_SPAN);',
+    'var viewS = 0, viewE = SPAN_MAX;',
+    'var chartH = TOP + LANES.length * ROW_H + (LANES.length - 1) * GAP + GAP + AXIS_H;',
+    'var wrap = document.getElementById("chartWrap");',
+    'var svg = document.getElementById("chart");',
+    'var tip = document.getElementById("tip");',
+    'var rafPending = false, rafTimer = 0, panning = false, panLastX = 0;',
+    'var NS = "http://www.w3.org/2000/svg";',
+    'function laneOf(side){ for(var i = 0; i < LANES.length; i++){ if(LANES[i].key === side) return LANES[i]; } return null; }',
+    'function laneIdx(lane){ for(var q = 0; q < LANES.length; q++){ if(LANES[q] === lane) return q; } return -1; }',
+    'function laneY(i){ return TOP + i * (ROW_H + GAP); }',
+    'function pxOf(t){ return GUTTER + (t - viewS) / Math.max(viewE - viewS, 1) * (wrap.clientWidth - 2 - GUTTER); }',
+    'function p2(n){ return n < 10 ? "0" + n : "" + n; }',
+    'function fmtClock(ms){ ms = Math.round(ms); var s = Math.floor(ms / 1000) % 60; var m = Math.floor(ms / 60000) % 60; var h = Math.floor(ms / 3600000); if(h > 0) return h + ":" + p2(m) + ":" + p2(s); return m + ":" + p2(s); }',
+    'function fmtS(ms){ return (ms / 1000).toFixed(3) + " s"; }',
+    'function fmtWall(iso){ if(!iso) return ""; var d = new Date(iso); if(isNaN(d.getTime())) return iso; return d.toLocaleString(); }',
+    'function mkEl(tag, attrs){ var el = document.createElementNS(NS, tag); for(var k in attrs){ el.setAttribute(k, attrs[k]); } return el; }',
+    'function tipRows(pairs){ for(var i = 0; i < pairs.length; i++){ var row = document.createElement("div"); row.className = "tiprow"; var k = document.createElement("span"); k.className = "tipk"; k.textContent = pairs[i][0]; var v = document.createElement("span"); v.className = "tipv"; v.textContent = pairs[i][1]; row.appendChild(k); row.appendChild(v); tip.appendChild(row); } }',
+    'function showTip(iv, lane, li){',
+    '  tip.textContent = "";',
+    '  var t = document.createElement("div"); t.className = "tname"; t.textContent = iv.name; tip.appendChild(t);',
+    '  tipRows([["Lane", lane.label], ["Started", fmtS(iv.start)], ["Ended", fmtS(iv.end)], ["Duration", fmtS(iv.end - iv.start)], ["Author", iv.author || "—"], ["Likes", iv.likes == null ? "—" : String(iv.likes)], ["End reason", iv.reason || "—"]]);',
+    '  if(DATA.served && iv.frameCode){ var img = document.createElement("img"); img.alt = ""; img.src = "/frames/" + iv.frameCode + "/f000.jpg"; img.onerror = function(){ img.remove(); }; tip.appendChild(img); }',
+    '  if(iv.url){ var tl = document.createElement("div"); tl.className = "tiplink"; tl.textContent = "Click to open on Instagram ↗"; tip.appendChild(tl); }',
+    '  var wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;',
+    '  var px = pxOf(iv.start) + 12;',
+    '  var py = laneY(li) + ROW_H + 6 + STRIP_H;',
+    '  tip.style.display = "block";',
+    '  var tw = tip.offsetWidth, th = tip.offsetHeight;',
+    '  if(px + tw > wrapW - 8) px = wrapW - tw - 8;',
+    '  if(px < 4) px = 4;',
+    '  if(py + th > wrapH - 8) py = laneY(li) - th - 6;',
+    '  if(py < 4) py = 4;',
+    '  tip.style.left = px + "px";',
+    '  tip.style.top = py + "px";',
+    '}',
+    'function hideTip(){ tip.style.display = "none"; }',
+    'function showActTip(a, px, py){',
+    '  tip.textContent = "";',
+    '  var t = document.createElement("div"); t.className = "tname"; t.textContent = a.label; tip.appendChild(t);',
+    '  tipRows([["Time", fmtS(a.t)]]);',
+    '  var wrapW = wrap.clientWidth, wrapH = wrap.clientHeight;',
+    '  var lx = px + 12, ly = py + 14 + STRIP_H;',
+    '  tip.style.display = "block";',
+    '  var tw = tip.offsetWidth, th = tip.offsetHeight;',
+    '  if(lx + tw > wrapW - 8) lx = wrapW - tw - 8;',
+    '  if(lx < 4) lx = 4;',
+    '  if(ly + th > wrapH - 8) ly = ly - th - 24;',
+    '  if(ly < 4) ly = 4;',
+    '  tip.style.left = lx + "px";',
+    '  tip.style.top = ly + "px";',
+    '}',
+    'function render(){',
+    '  hideTip();',
+    '  var W = wrap.clientWidth - 2;',
+    '  if(W < 220) W = 220;',
+    '  var plotW = W - GUTTER;',
+    '  var span = Math.max(viewE - viewS, 1);',
+    '  svg.setAttribute("width", W);',
+    '  svg.setAttribute("height", chartH);',
+    '  while(svg.firstChild) svg.removeChild(svg.firstChild);',
+    '  var defs = document.createElementNS(NS, "defs");',
+    '  for(var i = 0; i < LANES.length; i++){',
+    '    var cp = mkEl("clipPath", {id: "clip-" + LANES[i].key});',
+    '    cp.appendChild(mkEl("rect", {x: GUTTER, y: 0, width: plotW, height: chartH}));',
+    '    defs.appendChild(cp);',
+    '  }',
+    '  svg.appendChild(defs);',
+    '  var STEPS = [1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000];',
+    '  var step = STEPS[STEPS.length - 1];',
+    '  for(var j = 0; j < STEPS.length; j++){ if(STEPS[j] / span * plotW >= 80){ step = STEPS[j]; break; } }',
+    '  var ti = Math.ceil(viewS / step);',
+    '  for(var k = ti; k * step <= viewE; k++){',
+    '    var t = k * step;',
+    '    var px = GUTTER + (t - viewS) / span * plotW;',
+    '    svg.appendChild(mkEl("line", {x1: px, y1: 0, x2: px, y2: chartH, stroke: "#2c2c2a", "stroke-width": 1, "pointer-events": "none"}));',
+    '    var tl = mkEl("text", {x: px + 4, y: chartH - 8, fill: "#898781", "font-size": 11, "pointer-events": "none"});',
+    '    tl.textContent = fmtClock(t);',
+    '    svg.appendChild(tl);',
+    '  }',
+    '  for(var i = 0; i < LANES.length; i++){',
+    '    var ly = laneY(i);',
+    '    svg.appendChild(mkEl("rect", {x: 8, y: ly + 9, width: 8, height: 8, rx: 2, fill: LANES[i].color, "pointer-events": "none"}));',
+    '    var lt = mkEl("text", {x: 24, y: ly + 17, fill: "#c3c2b7", "font-size": 12, "pointer-events": "none"});',
+    '    lt.textContent = LANES[i].label;',
+    '    svg.appendChild(lt);',
+    '    svg.appendChild(mkEl("line", {x1: 0, y1: ly + ROW_H + GAP / 2 - 1, x2: W, y2: ly + ROW_H + GAP / 2 - 1, stroke: "#2c2c2a", "stroke-width": 1, "pointer-events": "none"}));',
+    '  }',
+    '  var panels = DATA.panels;',
+    '  for(var i = 0; i < panels.length; i++){',
+    '    var p = panels[i];',
+    '    var ln2 = laneOf(p.side);',
+    '    if(!ln2) continue;',
+    '    var li2 = laneIdx(ln2);',
+    '    if(li2 < 0) continue;',
+    '    var py2 = laneY(li2);',
+    '    var pxa = GUTTER + (p.s - viewS) / span * plotW;',
+    '    var pxb = GUTTER + (p.e - viewS) / span * plotW;',
+    '    if(pxb < GUTTER || pxa > W) continue;',
+    '    svg.appendChild(mkEl("rect", {x: Math.max(pxa, GUTTER), y: py2 + 2, width: Math.max(2, Math.min(pxb, W) - Math.max(pxa, GUTTER)), height: ROW_H - 4, rx: 3, fill: "rgba(255,255,255,0.05)", "pointer-events": "none"}));',
+    '  }',
+    '  var ivs = DATA.intervals;',
+    '  for(var i = 0; i < ivs.length; i++){',
+    '    var iv = ivs[i];',
+    '    var ln3 = laneOf(iv.side);',
+    '    if(!ln3) continue;',
+    '    var li3 = laneIdx(ln3);',
+    '    if(li3 < 0) continue;',
+    '    var ly3 = laneY(li3);',
+    '    var sxa = GUTTER + (iv.start - viewS) / span * plotW;',
+    '    var sxb = GUTTER + (iv.end - viewS) / span * plotW;',
+    '    if(sxb < GUTTER || sxa > W) continue;',
+    '    var bx = Math.max(sxa, GUTTER);',
+    '    var bw = Math.max(2, Math.min(sxb, W) - bx);',
+    '    svg.appendChild(mkEl("rect", {x: bx, y: ly3 + 6, width: bw, height: ROW_H - 12, rx: 2, fill: ln3.color, "pointer-events": "none"}));',
+    '    if(bw >= 56){',
+    '      var lab = mkEl("text", {x: bx + 5, y: ly3 + 17, fill: "#0d0d0d", "font-size": 11, "clip-path": "url(#clip-" + ln3.key + ")", "pointer-events": "none"});',
+    '      lab.textContent = iv.name + " · " + fmtS(iv.end - iv.start);',
+    '      svg.appendChild(lab);',
+    '    }',
+    '    var hit = mkEl("rect", {x: bx, y: ly3, width: Math.max(10, bw), height: ROW_H, fill: "transparent"});',
+    '    (function(iv, ln3, li3){',
+    '      hit.addEventListener("pointerenter", function(){ showTip(iv, ln3, li3); });',
+    '      hit.addEventListener("pointerleave", hideTip);',
+    '      if(iv.url){',
+    '        hit.style.cursor = "pointer";',
+    '        hit.addEventListener("click", function(){',
+    '          var a = document.createElement("a");',
+    '          a.href = iv.url; a.target = "_blank"; a.rel = "noopener";',
+    '          document.body.appendChild(a); a.click(); a.remove();',
+    '        });',
+    '      }',
+    '    })(iv, ln3, li3);',
+    '    svg.appendChild(hit);',
+    '  }',
+    '  var acts = DATA.actions.slice().sort(function(a, b){ return a.t - b.t; });',
+    '  var actLane = LANES.length - 1;',
+    '  var aly = laneY(actLane);',
+    '  var lastX = null, level = 0;',
+    '  for(var i = 0; i < acts.length; i++){',
+    '    var a = acts[i];',
+    '    var ax = GUTTER + (a.t - viewS) / span * plotW;',
+    '    if(ax < GUTTER - 5 || ax > W + 5) continue;',
+    '    if(lastX !== null && ax - lastX < 6){ level = (level + 1) % 2; } else { level = 0; }',
+    '    lastX = ax;',
+    '    var acy = aly + 9 + level * 10;',
+    '    svg.appendChild(mkEl("line", {x1: ax, y1: aly + 3, x2: ax, y2: aly + ROW_H - 3, stroke: "#383835", "stroke-width": 1, "pointer-events": "none"}));',
+    '    svg.appendChild(mkEl("circle", {cx: ax, cy: acy, r: 4, fill: "#c3c2b7", "pointer-events": "none"}));',
+    '    var ah = mkEl("circle", {cx: ax, cy: acy, r: 8, fill: "transparent"});',
+    '    (function(a, ax, acy){',
+    '      ah.addEventListener("pointerenter", function(){ showActTip(a, ax, acy); });',
+    '      ah.addEventListener("pointerleave", hideTip);',
+    '    })(a, ax, acy);',
+    '    svg.appendChild(ah);',
+    '  }',
+    '}',
+    'function schedule(){',
+    '  if(rafPending) return;',
+    '  rafPending = true;',
+    '  if(rafTimer) clearTimeout(rafTimer);',
+    '  rafTimer = setTimeout(function(){ rafTimer = 0; if(!rafPending) return; rafPending = false; render(); }, 120);',
+    '  requestAnimationFrame(function(){',
+    '    if(rafTimer){ clearTimeout(rafTimer); rafTimer = 0; }',
+    '    if(!rafPending) return; rafPending = false; render();',
+    '  });',
+    '}',
+    'svg.addEventListener("pointerdown", function(e){',
+    '  if(e.target !== svg) return;',
+    '  panning = true; panLastX = e.clientX; hideTip();',
+    '  svg.setPointerCapture(e.pointerId);',
+    '  svg.style.cursor = "grabbing";',
+    '});',
+    'svg.addEventListener("pointermove", function(e){',
+    '  if(!panning) return;',
+    '  var dx = e.clientX - panLastX;',
+    '  panLastX = e.clientX;',
+    '  var W = wrap.clientWidth - 2;',
+    '  var plotW = W - GUTTER;',
+    '  var span = viewE - viewS;',
+    '  viewS -= dx / plotW * span;',
+    '  viewS = Math.max(0, Math.min(viewS, SPAN_MAX - span));',
+    '  viewE = viewS + span;',
+    '  schedule();',
+    '});',
+    'svg.addEventListener("pointerup", function(){ panning = false; svg.style.cursor = ""; });',
+    'svg.addEventListener("pointercancel", function(){ panning = false; svg.style.cursor = ""; });',
+    'function zoomAt(factor, frac){',
+    '  var span = viewE - viewS;',
+    '  var newSpan = Math.max(MIN_SPAN, Math.min(span * factor, SPAN_MAX));',
+    '  var anchor = viewS + frac * span;',
+    '  viewS = anchor - frac * newSpan;',
+    '  viewS = Math.max(0, Math.min(viewS, SPAN_MAX - newSpan));',
+    '  viewE = viewS + newSpan;',
+    '  schedule();',
+    '}',
+    'wrap.addEventListener("wheel", function(e){',
+    '  e.preventDefault();',
+    '  var rect = wrap.getBoundingClientRect();',
+    '  var W = wrap.clientWidth - 2;',
+    '  var plotW = W - GUTTER;',
+    '  var frac = plotW > 0 ? Math.max(0, Math.min(1, (e.clientX - rect.left - GUTTER) / plotW)) : 0.5;',
+    '  zoomAt(e.deltaY > 0 ? 1.25 : 0.8, frac);',
+    '}, {passive: false});',
+    'document.getElementById("fitBtn").addEventListener("click", function(){ viewS = 0; viewE = SPAN_MAX; render(); });',
+    'window.addEventListener("keydown", function(e){',
+    '  if(e.key === "ArrowLeft" || e.key === "ArrowRight"){',
+    '    var span = viewE - viewS;',
+    '    var d = e.key === "ArrowLeft" ? -span * 0.1 : span * 0.1;',
+    '    var ns = Math.max(0, Math.min(viewS + d, SPAN_MAX - span));',
+    '    viewS = ns; viewE = ns + span;',
+    '    e.preventDefault();',
+    '    schedule();',
+    '  } else if(e.key === "ArrowUp" || e.key === "ArrowDown"){',
+    '    zoomAt(e.key === "ArrowUp" ? 0.8 : 1.25, 0.5);',
+    '    e.preventDefault();',
+    '  }',
+    '});',
+    'var tableBox = document.getElementById("tableBox");',
+    'document.getElementById("hideDataBtn").addEventListener("click", function(){',
+    '  var hidden = tableBox.style.display === "none";',
+    '  tableBox.style.display = hidden ? "" : "none";',
+    '  this.textContent = hidden ? "Hide data" : "Show data";',
+    '});',
+    'var dragStrip = document.getElementById("dragStrip");',
+    'var dragging = false, dragMoved = false, dragX0 = 0, dragY0 = 0, dragRect = null;',
+    'dragStrip.addEventListener("pointerdown", function(e){',
+    '  if(e.button !== 0) return;',
+    '  dragging = true; dragMoved = false;',
+    '  dragX0 = e.clientX; dragY0 = e.clientY;',
+    '  dragRect = wrap.getBoundingClientRect();',
+    '  try { dragStrip.setPointerCapture(e.pointerId); } catch(err) {}',
+    '  e.preventDefault();',
+    '});',
+    'dragStrip.addEventListener("pointermove", function(e){',
+    '  if(!dragging) return;',
+    '  var dx = e.clientX - dragX0, dy = e.clientY - dragY0;',
+    '  if(!dragMoved){',
+    '    if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;',
+    '    dragMoved = true;',
+    '    wrap.style.position = "fixed";',
+    '    wrap.style.margin = "0";',
+    '    wrap.style.left = dragRect.left + "px";',
+    '    wrap.style.top = dragRect.top + "px";',
+    '    wrap.style.width = Math.min(dragRect.width, window.innerWidth - 16) + "px";',
+    '    wrap.style.zIndex = "50";',
+    '    wrap.style.boxShadow = "0 12px 40px rgba(0,0,0,0.6)";',
+    '    document.getElementById("pinBtn").style.display = "";',
+    '    render();',
+    '  }',
+    '  var nx = Math.max(0, Math.min(dragRect.left + dx, window.innerWidth - wrap.offsetWidth));',
+    '  var ny = Math.max(0, Math.min(dragRect.top + dy, window.innerHeight - 80));',
+    '  wrap.style.left = nx + "px";',
+    '  wrap.style.top = ny + "px";',
+    '});',
+    'dragStrip.addEventListener("pointerup", function(){ dragging = false; });',
+    'dragStrip.addEventListener("pointercancel", function(){ dragging = false; });',
+    'document.getElementById("pinBtn").addEventListener("click", function(){',
+    '  wrap.style.position = ""; wrap.style.margin = ""; wrap.style.left = ""; wrap.style.top = "";',
+    '  wrap.style.width = ""; wrap.style.zIndex = ""; wrap.style.boxShadow = "";',
+    '  document.getElementById("pinBtn").style.display = "none";',
+    '  render();',
+    '});',
+    'window.addEventListener("resize", function(){',
+    '  if(wrap.style.position === "fixed"){',
+    '    wrap.style.left = Math.max(0, Math.min(parseFloat(wrap.style.left), window.innerWidth - wrap.offsetWidth)) + "px";',
+    '    wrap.style.top = Math.max(0, Math.min(parseFloat(wrap.style.top), window.innerHeight - 80)) + "px";',
+    '  }',
+    '  render();',
+    '});',
+    'var endLabel = DATA.endReason === "manual" ? "Manual (Q key)" : "Countdown finished";',
+    'var meta = document.getElementById("meta");',
+    'var msub = document.createElement("b"); msub.textContent = DATA.subject || "(no subject)";',
+    'meta.appendChild(msub);',
+    'if(DATA.note){ var mnote = document.createElement("span"); mnote.textContent = " · " + DATA.note; meta.appendChild(mnote); }',
+    'var mwall = document.createElement("span"); mwall.textContent = " · " + fmtWall(DATA.startedAt) + " → " + fmtWall(DATA.endedAt) + " · " + endLabel; meta.appendChild(mwall);',
+    'var chips = document.getElementById("chips");',
+    'function chip(label, val){ var c = document.createElement("span"); c.className = "chip"; c.textContent = label + " "; var b = document.createElement("b"); b.textContent = val; c.appendChild(b); chips.appendChild(c); }',
+    'chip("Viewing time", fmtS(DATA.stats.viewMs));',
+    'chip("Panels opened", String(DATA.stats.opens));',
+    'chip("Next presses", String(DATA.stats.scrolls));',
+    'chip("Intervals", String(DATA.stats.intervals));',
+    'var legend = document.getElementById("legend");',
+    'LANES.forEach(function(l){',
+    '  var lg = document.createElement("span"); lg.className = "lg";',
+    '  var sw = document.createElement("span"); sw.className = "sw"; sw.style.background = l.color;',
+    '  var ltxt = document.createElement("span"); ltxt.textContent = l.label;',
+    '  lg.appendChild(sw); lg.appendChild(ltxt); legend.appendChild(lg);',
+    '});',
+    'var tbody = document.getElementById("tbody");',
+    'DATA.intervals.slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(iv){',
+    '  var tr = document.createElement("tr");',
+    '  function td(v){ var c = document.createElement("td"); c.textContent = v; tr.appendChild(c); return c; }',
+    '  td(iv.name); td(iv.side); td(fmtS(iv.start)); td(fmtS(iv.end)); td(fmtS(iv.end - iv.start)); td(iv.author || "—"); td(iv.likes == null ? "—" : String(iv.likes)); td(iv.reason || "—");',
+    '  tbody.appendChild(tr);',
+    '});',
+    'if(DATA.intervals.length === 0 && DATA.actions.length === 0){',
+    '  document.getElementById("empty").style.display = "block";',
+    '  wrap.style.display = "none";',
+    '} else {',
+    '  render();',
+    '}',
+    '})();',
+    '</scr' + 'ipt>',
+    '</body>',
+    '</html>'
+  ];
+  return R.join('\n');
 }
 function refreshVidCount(){
   var files = [];
@@ -1288,11 +2046,10 @@ function bindAVSliders(){
   loadSettings();
   $('langEn').addEventListener('click', function(){ setLang('en'); });
   $('langZh').addEventListener('click', function(){ setLang('zh'); });
-  $('btnStart').addEventListener('click', startRun);
-  $('btnFullscreen').addEventListener('click', function(){
-    (document.documentElement.requestFullscreen || function(){}).call(document.documentElement);
-  });
+  $('btnStart').addEventListener('click', function(){ maybeAutoFullscreen(); startRun(); });
+  $('btnFullscreen').addEventListener('click', enterFullscreen);
   $('btnDownload').addEventListener('click', downloadCSV);
+  $('btnTimeline').addEventListener('click', downloadTimeline);
   $('btnBack').addEventListener('click', function(){ location.reload(); });
   bindAVSliders();
   $('btnFolderAdd').addEventListener('click', function(){
@@ -1313,6 +2070,7 @@ function bindAVSliders(){
   // The trigger setting still applies — use --trigger immediate for a fully
   // hands-off run.
   var tcfg = (typeof window.TASK_CONFIG !== 'undefined' && window.TASK_CONFIG) || {};
+  autoFsPending = !!tcfg.autoFullscreen;
   if(tcfg.autoStart && !/[?&]manual\b/.test(location.search)){
     setTimeout(startRun, 400);
   }

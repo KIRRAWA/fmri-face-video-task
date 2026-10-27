@@ -16,19 +16,25 @@ All commands below run from this folder.
 
 ## Quick start (browser mode)
 
-1. Put reels in `videos/` (MP4, H.264+AAC recommended) and run:
+1. Sync the Instagram pool from the review team's `pool.json` (downloads the
+   reels into `videos/` and rebuilds the manifest):
    ```bash
-   python3 generate_manifest.py
+   python3 task.py reels-sync
    ```
 2. Open `index.html`, adjust saturation / volume sliders, left/right pop-up
    percentage, center video, etc., and press **Start experiment**.
-3. Keys during a run: **A** open/close the pop-up reel · **B** next reel ·
-   **1/2** forwarded to the task page · **Esc** end early · trigger key
-   (default **5**) starts the run from the black screen.
+3. Keys during a run: **A** open/close the pop-up reel (reopening continues
+   with the **next** video) · **B** next reel · **1/2** forwarded to the task
+   page · **Esc** exit fullscreen (the run continues) · **F4** re-enter
+   fullscreen · **Q** end the run early · trigger key (default **5**) starts
+   the run from the black screen.
 
 ## Quick start (CLI mode)
 
 ```bash
+# 0. sync the video pool (first time; rerun whenever the pool gains reels):
+python3 task.py reels-sync
+
 # 1. one fully-configured run, no clicks:
 python3 task.py run --subject P01 --duration 10 --trigger immediate \
     --left-pct 50 --sat-center 100 --vol-center 0 --sat-reel 100 --vol-reel 0
@@ -48,7 +54,8 @@ python3 task.py serve
 
 | Command | What it does |
 |---|---|
-| `python3 task.py serve [--port 8000] [--no-open]` | Start the local server (static files + folder-scan APIs + run-log archive). |
+| `python3 task.py reels-sync [options]` | **Sync the Instagram pool** from the review team's `pool.json`: downloads missing reels into `videos/` and rebuilds `videos/manifest.js`. The canonical way to fill the pool. |
+| `python3 task.py serve [--port 8000] [--no-open] [--fullscreen]` | Start the local server (static files + folder-scan APIs + run-log archive). `--fullscreen` opens Edge fullscreen and auto-enters fullscreen on the first key press. |
 | `python3 task.py run [options]` | Set options, write `config.js` with autoStart, then serve. |
 | `python3 task.py folders add <path>` | Register a folder path; prints how many videos a scan finds inside. |
 | `python3 task.py folders list` | List registered folder paths. |
@@ -74,6 +81,8 @@ python3 task.py serve
 | `--vol-reel N` | Reel volume % | 0 |
 | `--pop-trigger manual\|auto` | Reels pop up on A-key, or on a timer | manual |
 | `--pop-interval SEC` | Auto pop-up interval in seconds | 10 |
+| `--seek` / `--no-seek` | Allow (or forbid) dragging the reel + local center progress bars. Seek actions are never logged. | unchanged |
+| `--fullscreen` / `--no-fullscreen` | Launch the browser fullscreen + auto-enter fullscreen on the first key press (Esc exits fullscreen but the run continues, F4 re-enters, Q ends early) | on |
 | `--port N` / `--no-open` | Server port / don't open the browser | 8000 / opens |
 
 Settings set here or via `config set` are applied on **every** load of the
@@ -82,12 +91,48 @@ defaults).
 
 ---
 
-## Importing the collector's video pool (reel-crawler integration)
+## Syncing the Instagram pool (reel-crawler integration)
 
-The task page and the video collector share folders — no copying:
+**`reels-sync` is the canonical way to fill the pool.** It reads the
+review-team pool (the reel-crawler's `sync_repo/pool.json`, falling back to
+`pool.json`), downloads every reel into this project's own `videos/` via
+yt-dlp (no Instagram login needed), and rebuilds `videos/manifest.js` — the
+manifest only ever lists pool shortcodes found on disk, so nothing else can
+enter the pool:
 
 ```bash
-# after the collector downloaded its pool into review_videos/:
+python3 task.py reels-sync              # download missing reels + rebuild manifest
+python3 task.py reels-sync --max 10     # cap the download count (test pools)
+python3 task.py reels-sync --no-download   # manifest only, from files on disk
+python3 task.py reels-sync --include-excluded  # also add model-excluded items
+python3 task.py reels-sync --crawler /path/to/reel-crawler  # override the location
+python3 task.py reels-sync --cookies /path/to/cookies.txt  # logged-in downloads
+python3 task.py reels-sync --delay 2    # pause between downloads (default)
+```
+
+`reels-sync` options:
+
+| Option | Meaning | Default |
+|---|---|---|
+| `--crawler PATH` | Reel-crawler checkout to read the pool from | sibling `reel-crawler/` (or `$FMRI_REELCRAWLER_ROOT`) |
+| `--no-download` | Skip downloading; rebuild the manifest from files already in `videos/` | downloads missing reels |
+| `--include-excluded` | Also download items the review team's model flagged as excluded (political / sensitive / language) | excluded items are skipped and listed |
+| `--max N` | Download at most N reels (quick test pools) | unlimited |
+| `--cookies PATH` | Cookie jar for downloads that need a login | `reel-crawler/instagram-session/cookies.txt` if present, else anonymous |
+| `--delay SEC` | Pause between download attempts | 2 |
+
+Per reel, **author, caption and like count** are baked into the manifest from
+the pool metadata; the like count is shown Instagram-style (e.g. `45.1K`) on
+the right side of the screen, and author + likes are written into the CSV log
+(`video_next` rows' `note` field). Already-downloaded reels are skipped via
+`videos/ig_downloaded.txt`, so reruns are cheap.
+
+### Importing a pool from an arbitrary folder (alternative)
+
+For pools that don't come from the review team, the task page and the
+collector can share folders — no copying:
+
+```bash
 python3 task.py folders add ~/reel-crawler/review_videos
 python3 task.py import ~/reel-crawler/review_videos
 python3 task.py serve
@@ -100,17 +145,19 @@ local metadata; the like count is shown Instagram-style (e.g. `45.1K`) on the
 right side of the screen, and author + likes are written into the CSV log
 (`video_next` rows' `note` field).
 
-Metadata is read from, in order of preference:
+With `reels-sync`, metadata is taken straight from each pool entry and baked
+into the manifest. The folder-import path (above) instead resolves metadata
+at import time, in order of preference:
 
 1. `pool.json` — the review-team merged pool (`{url: {username, likes, ...}}`)
 2. `feed_collection.sqlite` — crawler stores (`feed_items` table)
 3. `meta.json` — `review_frames/<code>/meta.json` capture files
-4. `authors.json` — legacy TikTok metadata
+4. `authors.json` — legacy metadata file (no longer written)
 5. `*.csv` — exports with `url` / `username` / `like_count` columns
 
-The match key is the video's file name (the Instagram shortcode or TikTok
-video id). Files with no matching metadata still play — they just show
-`@unknown` and no like count.
+The match key is the video's file name (the Instagram shortcode). Files with
+no matching metadata still play — they just show `@unknown` and no like
+count.
 
 ---
 
@@ -120,15 +167,24 @@ video id). Files with no matching metadata still play — they just show
 |---|---|
 | `config.json` | CLI settings + registered folders + active pool (created by `task.py`) |
 | `config.js` | What the page loads — CLI settings override localStorage |
-| `videos/manifest.js` | The active video pool (built-in videos/ or an imported folder) |
-| `data/events.jsonl` | One JSON line per finished run (server mode) |
+| `videos/manifest.js` | The active video pool — rebuilt by `reels-sync` (review-team shortcodes only) or by a folder import |
+| `videos/ig_downloaded.txt` | `reels-sync` download archive (gitignored) |
+| `data/events.jsonl` | One JSON line per finished run (server mode; includes the `timelineFile` pointer but not the HTML itself) |
 | `data/<subject>_<stamp>.csv` | Per-run CSV, same columns as the browser download |
+| `data/timeline_<subject>_<stamp>.html` | Per-run self-contained timeline visualization (zoomable / pannable; archived automatically in server mode) |
+
+The timeline's hover thumbnails are served from the sibling
+`reel-crawler/review_frames/` capture folder (same source the metadata chain
+uses — see above) via the `/frames/<shortcode>/<fNNN>.jpg` endpoint. Point
+`FMRI_FRAMES_ROOT` at another location if your frames live elsewhere; without
+a matching frame the tooltip simply shows text.
 
 ## Troubleshooting
 
 - **Video doesn't play after import** — the `/media/...` URLs only work while
   `task.py serve` is running; in browser mode the manifest falls back to the
-  built-in `videos/` pool. Re-run `generate_manifest.py` to rebuild it.
+  built-in `videos/` pool. Re-run `python3 task.py reels-sync --no-download`
+  to rebuild it.
 - **Pop-up volume resets** — browsers block unmuted autoplay; a volume of 0
   mutes the video, which is also the scanner-friendly default.
 - **`run` auto-starts with the wrong settings** — the page merges
@@ -136,3 +192,17 @@ video id). Files with no matching metadata still play — they just show
   `task.py config set ...`) to change CLI settings.
 - **Folder path rejected** — the path must exist and be an absolute,
   readable directory; the server only serves files inside registered folders.
+- **Fullscreen didn't happen** — if Edge is already running, macOS `open` may
+  reuse the existing window instead of launching fullscreen. Quit Edge first
+  (`pgrep -f "instagram-session"` should show nothing), then re-run. In
+  browser mode, fullscreen is entered on the first key press instead — the
+  first key is consumed by that, so press it twice on a slow machine.
+- **Timeline hover shows no thumbnail** — frames are only available when the
+  task runs through `task.py serve`, the file name is a 6+ character
+  Instagram shortcode, and `FMRI_FRAMES_ROOT` (default: sibling
+  `reel-crawler/review_frames/`) contains that shortcode's capture folder.
+  Built-in demo pools with TikTok-id names, and any `file://` timeline,
+  intentionally show text-only tooltips.
+- **Timeline file didn't download** — browsers may block the second automatic
+  download at the end of a run. Use the **Download timeline** button on the
+  end screen, or grab the archived copy from `data/` (server mode).
