@@ -50,6 +50,18 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
 .pool-row .name { font-weight: 600; color: #cfe6ff; }
 .pool-row .count { font-size: 12px; color: #8fd08f; }
 .pool-row .active-tag { font-size: 11px; color: #8fd08f; border: 1px solid #2d6b3f; padding: 1px 8px; border-radius: 999px; }
+#teamList { max-height: 34vh; overflow-y: auto; border: 1px solid #2a2a2a; border-radius: 8px; padding: 6px; background: #19191d; margin-bottom: 8px; }
+.team-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 12px; color: #bbb; border-radius: 6px; }
+.team-row:hover { background: #232329; }
+.team-row.disabled { opacity: .45; }
+.team-row .code { font: 12px ui-monospace, monospace; color: #bdf; }
+.team-row .tag-chip { font-size: 10px; border: 1px solid #2a4a68; color: #8fc3ef; padding: 0 6px; border-radius: 999px; white-space: nowrap; }
+.team-row .st-approved { border-color: #2d6b3f; color: #8fd08f; }
+.team-row .st-pending { border-color: #6b5a2d; color: #d8c98f; }
+.team-row .st-rejected { border-color: #6b2d2d; color: #e08f8f; }
+.team-row .st-excluded { border-color: #444; color: #999; }
+#teamLog { font: 11px ui-monospace, monospace; color: #8fd08f; white-space: pre-wrap; max-height: 22vh; overflow-y: auto; background: #16161a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.team-counts { font-size: 12px; color: #777; margin-bottom: 8px; }
 #folderMsg { font-size: 12px; color: #bbb; min-height: 16px; margin-top: 8px; }
 details.protocol { margin-top: 22px; background: #202024; border: 1px solid #333; border-radius: 8px; padding: 12px 16px; font-size: 13px; }
 details.protocol summary { cursor: pointer; color: #9cc; }
@@ -189,9 +201,19 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
         <input type="number" id="f_popinterval" value="10" min="2" step="1">
       </div>
       <div class="field full">
-        <label for="f_centervideo" data-i18n="field.centerVideo">Center video (YouTube URL or local video file; empty = task page placeholder)</label>
+        <label for="f_centerselect" data-i18n="field.centerSelect">Center documentary</label>
+        <select id="f_centerselect">
+          <option value="lawn" data-i18n="opt.centerLawn">1 · Lawn (center/stimulus_lawn.mp4)</option>
+          <option value="rocky" data-i18n="opt.centerRocky">2 · Rocky (center/stimulus_rocky.mp4)</option>
+          <option value="original" data-i18n="opt.centerOriginal">3 · Original (center/center.mp4)</option>
+          <option value="file" data-i18n="opt.centerFile">4 · Custom video file (path)</option>
+          <option value="weblink" data-i18n="opt.centerWeblink">5 · Web link (YouTube / URL)</option>
+        </select>
+      </div>
+      <div class="field full hidden" id="f_centervideoRow">
+        <label for="f_centervideo" data-i18n="field.centerVideo">Video path / URL</label>
         <input type="text" id="f_centervideo" placeholder="center/center.mp4 or a YouTube URL" data-i18n-ph="ph.centerVideo">
-        <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.</div>
+        <div class="hint" data-i18n="hint.centerVideo">The boring center video subjects watch while short videos pop up on the sides. A local file works offline; YouTube needs internet.</div>
       </div>
       <div class="field full">
         <label for="f_videosource" data-i18n="field.videoSource">Video source</label>
@@ -291,6 +313,21 @@ details.protocol code { background: #16161a; padding: 1px 5px; border-radius: 4p
       <div id="folderMsg"></div>
     </div>
 
+    <div id="teamSection">
+      <h2 data-i18n="team.title" style="font-size:15px;color:#fff;margin-bottom:10px">Instagram pool · team review</h2>
+      <div data-i18n="team.hint" style="font-size:12px;color:#777;margin-bottom:10px">Pull the review team's pool from the lab GitHub repo, tick the reels for this experiment, and apply — downloads run in the background. Category / audio tags are kept for a future preference algorithm.</div>
+      <div class="folder-row">
+        <button id="btnTeamRefresh" data-i18n="team.refresh">Refresh from GitHub</button>
+        <button id="btnTeamAll" data-i18n="team.selectAll">Select all</button>
+        <button id="btnTeamNone" data-i18n="team.selectNone">Clear</button>
+        <button id="btnTeamApply" data-i18n="team.apply">Apply pool list</button>
+      </div>
+      <div id="teamCounts" class="team-counts"></div>
+      <div id="teamList"></div>
+      <div id="teamMsg"></div>
+      <div id="teamProgress" class="hidden"><pre id="teamLog"></pre></div>
+    </div>
+
     <div class="btn-row">
       <button class="btn btn-primary" id="btnStart" data-i18n="btn.start">Start experiment</button>
       <button class="btn btn-ghost" id="btnFullscreen" data-i18n="btn.fullscreen">Fullscreen</button>
@@ -369,6 +406,28 @@ var I18N = {
     'folders.imported': 'Pool "{name}" imported ({n} videos) — reloading…',
     'folders.scanned': 'Scan finished: {n} pool(s) found.',
     'folders.error': 'Error: {msg}',
+    'team.title': 'Instagram pool · team review',
+    'team.hint': 'Pull the review team\'s pool from the lab GitHub repo, tick the reels for this experiment, and apply — downloads run in the background. Category / audio tags are kept for a future preference algorithm.',
+    'team.refresh': 'Refresh from GitHub',
+    'team.selectAll': 'Select all',
+    'team.selectNone': 'Clear',
+    'team.apply': 'Apply pool list',
+    'team.approved': 'approved',
+    'team.pending': 'awaiting review',
+    'team.rejected': 'rejected',
+    'team.excluded': 'excluded',
+    'team.inPool': 'in pool',
+    'team.onDisk': 'downloaded',
+    'team.needsServer': 'The team pool card needs the local server: run  python3 task.py serve  (file:// cannot reach the API).',
+    'team.noRepo': 'Team repo not found — set FMRI_TEAM_REPO or run the reel-crawler team_gui setup on this machine.',
+    'team.none': 'No videos yet — the review team has not decided on any reels, or the pool is empty.',
+    'team.noneSelected': 'Tick at least one video first.',
+    'team.running': 'Working…',
+    'team.done': 'Done: {n} video(s) in the pool list.',
+    'team.failed': '{n} download(s) failed.',
+    'team.pulled': 'Pulled from GitHub: {note}',
+    'team.counts': '{approved} approved · {pending} awaiting review · {excluded} excluded',
+    'team.error': 'Error: {msg}',
     'field.popSide': 'Popup side',
     'opt.popRandom': 'Random left / right',
     'opt.popBoth': 'Both sides at once',
@@ -380,9 +439,15 @@ var I18N = {
     'field.popInterval': 'Auto popup interval (seconds)',
     'field.popLeftPct': 'Left-side chance (%) in Random mode',
     'hint.popLeftPct': 'Percentage of random pop-ups that open on the LEFT (right = 100 − this).',
-    'field.centerVideo': 'Center video (YouTube URL or local video file; empty = task page placeholder)',
+    'field.centerSelect': 'Center documentary',
+    'opt.centerLawn': '1 · Lawn (center/stimulus_lawn.mp4)',
+    'opt.centerRocky': '2 · Rocky (center/stimulus_rocky.mp4)',
+    'opt.centerOriginal': '3 · Original (center/center.mp4)',
+    'opt.centerFile': '4 · Custom video file (path)',
+    'opt.centerWeblink': '5 · Web link (YouTube / URL)',
+    'field.centerVideo': 'Video path / URL',
     'ph.centerVideo': 'center/center.mp4 or a YouTube URL',
-    'hint.centerVideo': 'The boring center video subjects watch while short videos pop up on the sides. A local file (e.g. center/center.mp4) works offline; YouTube needs internet.',
+    'hint.centerVideo': 'Only used by options 4–5. A local file (e.g. center/center.mp4) plays offline; a YouTube URL needs internet. Options 1–3 play the built-in documentaries and ignore this box.',
     'field.videoSource': 'Video source',
     'opt.srcAuto': 'Auto (real videos if present, else placeholder clips)',
     'opt.srcReal': 'Real videos only (videos/manifest.js)',
@@ -450,6 +515,28 @@ var I18N = {
     'folders.imported': '视频池「{name}」已导入（{n} 条视频）— 正在刷新…',
     'folders.scanned': '扫描完成：找到 {n} 个视频池。',
     'folders.error': '错误：{msg}',
+    'team.title': 'Instagram 视频池 · 团队审核',
+    'team.hint': '从实验室 GitHub 仓库拉取团队审核池，勾选本实验要用的 reels 后点应用——下载在后台进行。分类 / 音频标签会保留下来，供将来 preference 算法使用。',
+    'team.refresh': '从 GitHub 刷新',
+    'team.selectAll': '全选',
+    'team.selectNone': '清空',
+    'team.apply': '应用视频池列表',
+    'team.approved': '已通过',
+    'team.pending': '待审核',
+    'team.rejected': '已驳回',
+    'team.excluded': '已排除',
+    'team.inPool': '在池中',
+    'team.onDisk': '已下载',
+    'team.needsServer': '团队视频池卡片需要本地服务器：运行 python3 task.py serve（file:// 无法访问 API）。',
+    'team.noRepo': '未找到团队仓库——设置 FMRI_TEAM_REPO，或在本机运行 reel-crawler 的 team_gui 完成 setup。',
+    'team.none': '暂无视频——团队还没有做出审核决定，或池为空。',
+    'team.noneSelected': '请先勾选至少一个视频。',
+    'team.running': '进行中…',
+    'team.done': '完成：视频池列表现有 {n} 条视频。',
+    'team.failed': '{n} 条下载失败。',
+    'team.pulled': '已从 GitHub 拉取：{note}',
+    'team.counts': '{approved} 已通过 · {pending} 待审核 · {excluded} 已排除',
+    'team.error': '错误：{msg}',
     'field.popSide': '弹出侧',
     'opt.popRandom': '随机左边 / 右边',
     'opt.popBoth': '两侧同时弹出',
@@ -461,9 +548,15 @@ var I18N = {
     'field.popInterval': '自动弹出间隔（秒）',
     'field.popLeftPct': '随机模式下左侧出现概率（%）',
     'hint.popLeftPct': '随机弹出时出现在左侧的百分比（右侧 = 100 − 此值）。',
-    'field.centerVideo': '居中视频（YouTube 链接或本地视频文件；留空 = 任务页占位）',
+    'field.centerSelect': '中央纪录片',
+    'opt.centerLawn': '1 · Lawn（center/stimulus_lawn.mp4）',
+    'opt.centerRocky': '2 · Rocky（center/stimulus_rocky.mp4）',
+    'opt.centerOriginal': '3 · 原版（center/center.mp4）',
+    'opt.centerFile': '4 · 自选本地视频文件（路径）',
+    'opt.centerWeblink': '5 · 网络链接（YouTube / URL）',
+    'field.centerVideo': '视频路径 / 链接',
     'ph.centerVideo': 'center/center.mp4 或 YouTube 链接',
-    'hint.centerVideo': '受试者观看的居中任务视频，两侧随机弹出短视频。填本地文件（如 center/center.mp4）可离线播放；YouTube 需联网。',
+    'hint.centerVideo': '仅选项 4–5 使用。本地文件（如 center/center.mp4）可离线播放；YouTube 链接需联网。选项 1–3 直接播放内置纪录片，忽略此框。',
     'field.videoSource': '视频来源',
     'opt.srcAuto': '自动（有真实视频就用，否则占位动画）',
     'opt.srcReal': '仅真实视频（videos/manifest.js）',
@@ -629,13 +722,18 @@ function setLang(lang){
 }
 
 /* ================= Default config ================= */
+var CENTER_PRESETS = {   // center documentary selector -> video source
+  lawn: 'center/stimulus_lawn.mp4',
+  rocky: 'center/stimulus_rocky.mp4',
+  original: 'center/center.mp4'
+};
 var DEFAULTS = {
   videosource: 'auto',
   tasksrc: '', durationMin: 10,
   trigger: 'wait', triggerkey: '5', keya: 'a', keyb: 'b',
   decor: true, subject: 'P01', note: '',
   popside: 'random', popleft: 50, poptrigger: 'manual', popinterval: 10,
-  centervideo: 'center/center.mp4',
+  centerselect: 'original', centervideo: 'center/center.mp4',
   satcenter: 100, volcenter: 0, satreel: 100, volreel: 0,
   allowseek: false
 };
@@ -1306,12 +1404,18 @@ function readSettings(){
     popleft: readNum('f_popleft', 50, 0, 100),
     poptrigger: $('f_poptrigger').value,
     popinterval: Math.max(2, readNum('f_popinterval', 10, 2, 3600)),
+    centerselect: $('f_centerselect').value,
     centervideo: $('f_centervideo').value.trim(),
     satcenter: readNum('f_satcenter', 100, 0, 200),
     volcenter: readNum('f_volcenter', 0, 0, 100),
     satreel: readNum('f_satreel', 100, 0, 200),
     volreel: readNum('f_volreel', 0, 0, 100)
   };
+  // Preset choices resolve to the built-in documentary paths; only the
+  // custom file / web link options use the typed value.
+  if(S.centerselect !== 'file' && S.centerselect !== 'weblink'){
+    S.centervideo = CENTER_PRESETS[S.centerselect] || CENTER_PRESETS.original;
+  }
 }
 function saveSettings(){ try { localStorage.setItem('fmri-video-task-settings', JSON.stringify(S)); } catch(e){} }
 function loadSettings(){
@@ -1333,11 +1437,28 @@ function loadSettings(){
   $('f_subject').value = d.subject; $('f_note').value = d.note;
   $('f_popsid').value = d.popside; $('f_popleft').value = d.popleft;
   $('f_poptrigger').value = d.poptrigger;
-  $('f_popinterval').value = d.popinterval; $('f_centervideo').value = d.centervideo;
+  $('f_popinterval').value = d.popinterval;
+  syncCenterSelect(d.centervideo, d.centerselect);
   $('f_satcenter').value = d.satcenter; $('v_satcenter').textContent = d.satcenter + '%';
   $('f_volcenter').value = d.volcenter; $('v_volcenter').textContent = d.volcenter + '%';
   $('f_satreel').value = d.satreel; $('v_satreel').textContent = d.satreel + '%';
   $('f_volreel').value = d.volreel; $('v_volreel').textContent = d.volreel + '%';
+}
+// Mirror the center selector from a saved centervideo value (+ optional saved
+// selector choice): a preset path matches a preset option, any http(s) URL
+// matches the web link option, anything else is treated as a custom file.
+function syncCenterSelect(videoVal, savedSelect){
+  var sel = savedSelect;
+  if(sel !== 'file' && sel !== 'weblink' && !CENTER_PRESETS[sel]) sel = null;
+  if(!sel){
+    var match = null;
+    for(var k in CENTER_PRESETS) if(CENTER_PRESETS[k] === videoVal) match = k;
+    sel = match || (/^https?:\/\//i.test(videoVal) ? 'weblink' : 'file');
+  }
+  $('f_centerselect').value = sel;
+  if(CENTER_PRESETS[sel]) $('f_centervideo').value = CENTER_PRESETS[sel];
+  else $('f_centervideo').value = videoVal;
+  $('f_centervideoRow').classList.toggle('hidden', sel !== 'file' && sel !== 'weblink');
 }
 function startRun(){
   readSettings();
@@ -2028,6 +2149,104 @@ function renderPools(){
       list.innerHTML = '<div class="folder-row"><span class="path">' + tr('folders.noPools') + '</span></div>';
   }).catch(function(){});
 }
+
+/* ================= Team pool (server mode only) ================= */
+var teamPollTimer = null;
+function teamMsg(msg, isErr){
+  $('teamMsg').textContent = msg || '';
+  $('teamMsg').style.color = isErr ? '#e06c4f' : '#8fd08f';
+}
+function teamRow(v){
+  var row = document.createElement('label');
+  row.className = 'team-row';
+  var addable = (v.status === 'approved' || v.status === 'pending');
+  if(!addable) row.classList.add('disabled');
+  var cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.value = v.code;
+  if(!addable) cb.disabled = true;
+  else cb.checked = v.inPool || v.status === 'approved';
+  var code = document.createElement('span'); code.className = 'code'; code.textContent = v.code;
+  var meta = document.createElement('span');
+  meta.textContent = '@' + (v.username || 'unknown') +
+    (v.likes != null ? ' · ♥ ' + fmtLikes(v.likes) : '');
+  var cat = document.createElement('span'); cat.className = 'tag-chip';
+  cat.textContent = v.category || 'other';
+  var st = document.createElement('span'); st.className = 'tag-chip st-' + v.status;
+  st.textContent = tr('team.' + v.status) || v.status;
+  row.appendChild(cb); row.appendChild(code); row.appendChild(meta);
+  row.appendChild(cat); row.appendChild(st);
+  var flags = [];
+  if(v.inPool) flags.push(tr('team.inPool'));
+  if(v.onDisk) flags.push(tr('team.onDisk'));
+  if(flags.length){
+    var f = document.createElement('span'); f.className = 'tag-chip';
+    f.textContent = flags.join(' · ');
+    row.appendChild(f);
+  }
+  return row;
+}
+function renderTeamData(d){
+  var list = $('teamList'); list.innerHTML = '';
+  $('teamCounts').textContent = '';
+  teamMsg('', false);
+  if(d.error){ teamMsg(trFill('team.error', { msg: d.error }), true); return; }
+  if(d.pullNote) teamMsg(trFill('team.pulled', { note: d.pullNote }), !d.pulled);
+  var c = d.counts || {};
+  $('teamCounts').textContent = trFill('team.counts', {
+    approved: c.approved || 0, pending: c.pending || 0, excluded: c.excluded || 0 });
+  var rows = d.videos || [];
+  if(!rows.length){
+    list.innerHTML = '<div class="folder-row"><span class="path">' + tr('team.none') + '</span></div>';
+    return;
+  }
+  rows.forEach(function(v){ list.appendChild(teamRow(v)); });
+}
+function loadTeamPool(refresh){
+  if(location.protocol === 'file:'){
+    $('teamList').innerHTML = '<div class="folder-row"><span class="path">' + tr('team.needsServer') + '</span></div>';
+    return;
+  }
+  fetch('/api/team/pool' + (refresh ? '?refresh=1' : '')).then(function(r){ return r.json(); })
+    .then(renderTeamData)
+    .catch(function(e){ teamMsg(trFill('team.error', { msg: String(e) }), true); });
+}
+function teamSelectAll(on){
+  document.querySelectorAll('#teamList input[type="checkbox"]').forEach(function(cb){
+    if(!cb.disabled) cb.checked = on;
+  });
+}
+function teamApply(){
+  if(location.protocol === 'file:') return;
+  var codes = [];
+  document.querySelectorAll('#teamList input[type="checkbox"]:checked').forEach(function(cb){
+    codes.push(cb.value);
+  });
+  if(!codes.length){ teamMsg(tr('team.noneSelected'), true); return; }
+  teamMsg('', false);
+  fetch('/api/team/pool', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ codes: codes }) })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if(res.error){ teamMsg(trFill('team.error', { msg: res.error }), true); return; }
+      $('teamProgress').classList.remove('hidden');
+      $('teamLog').textContent = tr('team.running');
+      teamMsg(tr('team.running'), false);
+      if(teamPollTimer) clearInterval(teamPollTimer);
+      teamPollTimer = setInterval(pollTeamStatus, 1500);
+    }).catch(function(e){ teamMsg(trFill('team.error', { msg: String(e) }), true); });
+}
+function pollTeamStatus(){
+  fetch('/api/team/status').then(function(r){ return r.json(); }).then(function(st){
+    var log = (st.log || []).slice(-20);
+    $('teamLog').textContent = log.join('\n') || tr('team.running');
+    if(st.done && !st.running){
+      clearInterval(teamPollTimer); teamPollTimer = null;
+      var msg = trFill('team.done', { n: (st.added || []).length });
+      if((st.failed || []).length) msg += ' ' + trFill('team.failed', { n: st.failed.length });
+      teamMsg(msg, (st.failed || []).length > 0);
+      loadTeamPool(false);
+      refreshVidCount();
+    }
+  }).catch(function(){});
+}
 function bindAVSliders(){
   var pairs = [['f_satcenter','v_satcenter'], ['f_volcenter','v_volcenter'],
                ['f_satreel','v_satreel'], ['f_volreel','v_volreel']];
@@ -2052,6 +2271,11 @@ function bindAVSliders(){
   $('btnTimeline').addEventListener('click', downloadTimeline);
   $('btnBack').addEventListener('click', function(){ location.reload(); });
   bindAVSliders();
+  $('f_centerselect').addEventListener('change', function(){
+    var sel = this.value;
+    $('f_centervideoRow').classList.toggle('hidden', sel !== 'file' && sel !== 'weblink');
+    if(CENTER_PRESETS[sel]) $('f_centervideo').value = CENTER_PRESETS[sel];
+  });
   $('btnFolderAdd').addEventListener('click', function(){
     var path = $('f_folderpath').value.trim();
     if(!path){ folderMsg('', false); return; }
@@ -2066,6 +2290,11 @@ function bindAVSliders(){
   });
   $('btnFolderScan').addEventListener('click', function(){ renderFolders(); renderPools(); });
   renderFolders();
+  $('btnTeamRefresh').addEventListener('click', function(){ loadTeamPool(true); });
+  $('btnTeamAll').addEventListener('click', function(){ teamSelectAll(true); });
+  $('btnTeamNone').addEventListener('click', function(){ teamSelectAll(false); });
+  $('btnTeamApply').addEventListener('click', teamApply);
+  loadTeamPool(false);
   // CLI auto-start (task.py run): start the experiment without any clicks.
   // The trigger setting still applies — use --trigger immediate for a fully
   // hands-off run.

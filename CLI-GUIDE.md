@@ -69,7 +69,7 @@ python3 task.py serve
 
 | Option | Meaning | Default |
 |---|---|---|
-| `--center PATH\|URL` | Center documentary (local file or YouTube link) | `center/center.mp4` |
+| `--center X` | Center documentary: `lawn` \| `rocky` \| `original` (built-in presets), a local path, or a URL | `original` (`center/center.mp4`) |
 | `--subject ID` | Subject id in logs / CSV filename | `P01` |
 | `--duration MIN` | Run length in minutes | 10 |
 | `--trigger wait\|immediate` | Wait for the trigger key, or start at once | wait |
@@ -122,10 +122,27 @@ python3 task.py reels-sync --delay 2    # pause between downloads (default)
 | `--delay SEC` | Pause between download attempts | 2 |
 
 Per reel, **author, caption and like count** are baked into the manifest from
-the pool metadata; the like count is shown Instagram-style (e.g. `45.1K`) on
-the right side of the screen, and author + likes are written into the CSV log
-(`video_next` rows' `note` field). Already-downloaded reels are skipped via
-`videos/ig_downloaded.txt`, so reruns are cheap.
+the pool metadata, together with **tags** (review category / model category /
+audio status) kept for a future preference algorithm; the like count is shown
+Instagram-style (e.g. `45.1K`) on the right side of the screen, and author +
+likes are written into the CSV log (`video_next` rows' `note` field).
+Already-downloaded reels are skipped via `videos/ig_downloaded.txt`, so
+reruns are cheap.
+
+**Pinned selection:** when `videos/pool_selection.json` exists (written by
+the settings page's *Instagram pool · team review* card, or created by hand:
+`{"codes": ["<shortcode>", ...]}`), `reels-sync` restricts the pool to
+exactly those shortcodes instead of the whole team pool. Delete the file to
+go back to "everything non-excluded".
+
+**Server endpoints (used by the team-review card):**
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/team/pool` | The review-team pool with per-video status (approved / awaiting review / rejected / excluded), tags, and whether each reel is in this experiment's pool or on disk. Reads `FMRI_TEAM_REPO` (default: reel-crawler's `sync_repo/`). |
+| `GET /api/team/pool?refresh=1` | Same, but runs `git pull` in the team repo first (no credentials are handled by this project — the checkout's own remote does the work). |
+| `POST /api/team/pool` `{"codes": [...]}` | Save the selection, download missing reels in the background, rebuild the manifest (tags intact). |
+| `GET /api/team/status` | Progress of the background import: `running`, `log`, `added`, `failed`. |
 
 ### Importing a pool from an arbitrary folder (alternative)
 
@@ -168,6 +185,7 @@ count.
 | `config.json` | CLI settings + registered folders + active pool (created by `task.py`) |
 | `config.js` | What the page loads — CLI settings override localStorage |
 | `videos/manifest.js` | The active video pool — rebuilt by `reels-sync` (review-team shortcodes only) or by a folder import |
+| `videos/pool_selection.json` | Optional pinned selection (gitignored): when present, the pool is restricted to the listed shortcodes |
 | `videos/ig_downloaded.txt` | `reels-sync` download archive (gitignored) |
 | `data/events.jsonl` | One JSON line per finished run (server mode; includes the `timelineFile` pointer but not the HTML itself) |
 | `data/<subject>_<stamp>.csv` | Per-run CSV, same columns as the browser download |

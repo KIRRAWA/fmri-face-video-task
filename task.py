@@ -27,7 +27,8 @@ Commands (run from this directory):
         Set options, write config.js (auto-start), then serve. The browser
         opens fullscreen by default.
         Options:
-          --center PATH|URL      center documentary (default: center/center.mp4)
+          --center X            center documentary: lawn|rocky|original, a
+                                local path, or a URL (default: original)
           --subject P01          subject id
           --duration MIN         run length in minutes (default 10)
           --trigger wait|immediate   wait for the trigger key, or start at once
@@ -73,6 +74,13 @@ Timeline thumbnails: /frames/<shortcode>/fNNN.jpg is served read-only from
 FRAMES_ROOT (default: the sibling reel-crawler/review_frames folder; override
 with the FMRI_FRAMES_ROOT environment variable).
 
+Team pool: the settings-page "Instagram pool · team review" card pulls the
+review-team repo (sync_repo under the reel-crawler checkout; override with
+FMRI_TEAM_REPO), shows which reels the team has approved, and lets the
+operator choose which ones belong in this experiment's pool (saved in
+videos/pool_selection.json). Category / audio tags travel with each entry in
+videos/manifest.js for a future preference algorithm.
+
 Metadata import: video files are matched to author + like counts from, in
 order of preference:
     pool.json                review_team.py merged pool ({url: {username, likes, ...}})
@@ -116,6 +124,14 @@ SETTING_KEYS = (
     "keya", "keyb", "decor", "popleft", "popside", "poptrigger", "popinterval",
     "satcenter", "volcenter", "satreel", "volreel", "allowseek",
 )
+# --center <keyword> shortcuts for the three built-in documentaries
+# (mirrors the settings page selector: lawn / rocky / original /
+# custom file / web link). Resolved to the project-relative path.
+CENTER_ALIASES = {
+    "lawn": "center/stimulus_lawn.mp4",
+    "rocky": "center/stimulus_rocky.mp4",
+    "original": "center/center.mp4",
+}
 
 
 # --------------------------------------------------------------------------
@@ -556,6 +572,12 @@ class Handler(BaseHTTPRequestHandler):
         elif url == "/api/pools":
             body = _json(self, {"pools": list_pools()})
             self.end_headers(); self.wfile.write(body)
+        elif url == "/api/team/pool":
+            body = _json(self, team_pool_info(refresh="refresh=1" in self.path))
+            self.end_headers(); self.wfile.write(body)
+        elif url == "/api/team/status":
+            body = _json(self, TEAM_STATUS)
+            self.end_headers(); self.wfile.write(body)
         elif url.startswith("/api/"):
             self.send_error(404)
         else:
@@ -633,6 +655,15 @@ class Handler(BaseHTTPRequestHandler):
             body = _json(self, {"saved": len(rows), "file": f"data/{base}.csv",
                                 "timeline": timeline_rel})
             self.end_headers(); self.wfile.write(body)
+        elif url == "/api/team/pool":
+            codes = data.get("codes")
+            if not isinstance(codes, list) or not codes:
+                body = _json(self, {"error": "no codes"})
+            elif not team_apply_start(codes):
+                body = _json(self, {"error": "a team import is already running"})
+            else:
+                body = _json(self, {"started": True})
+            self.end_headers(); self.wfile.write(body)
         else:
             self.send_error(404)
 
@@ -670,6 +701,8 @@ def _apply_settings(cfg, args):
     for key, val in mapping:
         if val is not None:
             s[key] = val
+    if s.get("centervideo") in CENTER_ALIASES:
+        s["centervideo"] = CENTER_ALIASES[s["centervideo"]]
     cfg["settings"] = s
     return cfg
 
@@ -767,6 +800,19 @@ REELCRAWLER_ROOT = os.environ.get("FMRI_REELCRAWLER_ROOT") or os.path.join(
 
 SHORTCODE_RE = re.compile(r"^[A-Za-z0-9_-]{6,}$")
 
+# The review-team repo (reel-crawler/sync_repo) — the lab GitHub checkout
+# that holds pool.json + opinions/. Override with FMRI_TEAM_REPO.
+TEAM_REPO = os.environ.get("FMRI_TEAM_REPO") or os.path.join(
+    REELCRAWLER_ROOT, "sync_repo")
+# When present, this file pins the experiment pool to exactly the listed
+# shortcodes (gitignored — per-machine choice). Absent = whole team pool.
+TEAM_SELECTION = os.path.join(HERE, "videos", "pool_selection.json")
+
+# Background team-import state, polled by the settings page at
+# GET /api/team/status.
+TEAM_STATUS = {"running": False, "done": False, "started": 0,
+               "log": [], "added": [], "failed": []}
+
 
 def load_reels_pool(crawler):
     """Load the review-team merged pool (sync_repo/pool.json preferred).
@@ -788,6 +834,13 @@ def load_reels_pool(crawler):
     return None, None
 
 
+def _clean_env():
+    """Environment without the proxy variables (this machine's dead
+    127.0.0.1:10887 proxy would break yt-dlp and git)."""
+    return {k: v for k, v in os.environ.items()
+            if k.lower() not in ("http_proxy", "https_proxy", "all_proxy", "no_proxy")}
+
+
 def download_reel(url, out_dir, archive, jar=None, timeout=600):
     """Download one Instagram reel into out_dir via yt-dlp (anonymously, or
     with a Netscape cookie jar when one exists). Returns (ok, message)."""
@@ -797,9 +850,7 @@ def download_reel(url, out_dir, archive, jar=None, timeout=600):
     cmd += ["-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b",
             "-o", os.path.join(out_dir, "%(id)s.%(ext)s"),
             "--download-archive", archive, url]
-    # Strip dead proxy env vars (this machine's 127.0.0.1:10887).
-    env = {k: v for k, v in os.environ.items()
-           if k.lower() not in ("http_proxy", "https_proxy", "all_proxy", "no_proxy")}
+    env = _clean_env()
     try:
         r = subprocess.run(cmd, env=env, capture_output=True, text=True,
                            timeout=timeout)
@@ -813,6 +864,275 @@ def download_reel(url, out_dir, archive, jar=None, timeout=600):
     return False, (last[-1] if last else "exit %d" % r.returncode)
 
 
+def pool_items_by_code(items):
+    """{code: item} for every valid-Instagram-shortcode pool item."""
+    out = {}
+    for it in items or []:
+        if isinstance(it, dict) and SHORTCODE_RE.fullmatch(str(it.get("code") or "")):
+            out[str(it["code"])] = it
+    return out
+
+
+def team_opinions(repo):
+    """Latest global decision per reel URL across all opinion files
+    (later utc wins). Returns {url: {action, category, user, utc}}."""
+    out = {}
+    d = os.path.join(repo, "opinions")
+    if not os.path.isdir(d):
+        return out
+    for name in sorted(os.listdir(d)):
+        if not name.endswith(".jsonl"):
+            continue
+        try:
+            with open(os.path.join(d, name), encoding="utf-8") as fp:
+                for line in fp:
+                    try:
+                        op = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(op, dict) or not op.get("url"):
+                        continue
+                    cur = out.get(op["url"])
+                    if cur is None or str(op.get("utc") or "") >= str(cur.get("utc") or ""):
+                        out[op["url"]] = op
+        except OSError:
+            continue
+    return out
+
+
+def load_team_selection():
+    """The pinned pool selection (videos/pool_selection.json).
+    None = no file (whole non-excluded team pool); [] = empty pool."""
+    try:
+        with open(TEAM_SELECTION, encoding="utf-8") as fp:
+            sel = json.load(fp)
+        if isinstance(sel, dict) and isinstance(sel.get("codes"), list):
+            return [str(c) for c in sel["codes"] if SHORTCODE_RE.fullmatch(str(c))]
+    except (OSError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def manifest_code_set():
+    """Shortcodes currently listed in videos/manifest.js."""
+    codes = set()
+    try:
+        with open(MANIFEST, encoding="utf-8") as fp:
+            for m in re.finditer(r'"src"\s*:\s*"videos/([A-Za-z0-9_-]{6,})\.'
+                                 r'(?:mp4|webm|m4v|mov)"', fp.read()):
+                codes.add(m.group(1))
+    except OSError:
+        pass
+    return codes
+
+
+def on_disk(code):
+    vdir = os.path.join(HERE, "videos")
+    return any(os.path.isfile(os.path.join(vdir, code + ext))
+               for ext in VIDEO_EXTS)
+
+
+def rebuild_manifest(pool_items, opinions, wanted=None, include_excluded=False):
+    """Rebuild videos/manifest.js. wanted = list of shortcodes, or None for
+    every non-excluded pool code. Entries carry {src, author, nick, desc
+    [, likes][, tags]} — tags (category / model_category / audio_status) are
+    kept for a future preference algorithm. Returns (entries, missing)."""
+    by_code = pool_items_by_code(pool_items)
+    if wanted is None:
+        wanted = [c for c, it in by_code.items()
+                  if include_excluded
+                  or str(it.get("model_status") or "") != "excluded"]
+    entries, missing = [], 0
+    for code in wanted:
+        if not SHORTCODE_RE.fullmatch(code):
+            continue
+        it = by_code.get(code) or {}
+        if not include_excluded and str(it.get("model_status") or "") == "excluded":
+            continue
+        fn = None
+        for ext in VIDEO_EXTS:
+            if os.path.isfile(os.path.join(HERE, "videos", code + ext)):
+                fn = code + ext
+                break
+        if not fn:
+            missing += 1
+            continue
+        op = opinions.get(it.get("url")) if it.get("url") else None
+        e = {"src": "videos/" + fn,
+             "author": str(it.get("username") or ""),
+             "nick": str(it.get("username") or ""),
+             "desc": str(it.get("caption") or "")[:500]}
+        likes = it.get("likes")
+        if isinstance(likes, (int, float)):
+            e["likes"] = int(likes)
+        tags = {}
+        cat = str((op or {}).get("category") or it.get("model_category") or "")
+        if cat:
+            tags["category"] = cat
+        if it.get("model_category"):
+            tags["model_category"] = str(it["model_category"])
+        if it.get("audio_status"):
+            tags["audio_status"] = str(it["audio_status"])
+        if tags:
+            e["tags"] = tags
+        entries.append(e)
+    header = (
+        "// Video manifest (auto-generated by task.py reels-sync — do not edit by hand;\n"
+        "// pool synced from the review-team reel-crawler pool.json).\n"
+        "// Only Instagram shortcodes from the review-team pool enter this manifest.\n"
+        "// Each entry: { src, author, nick, desc[, likes][, tags] } — likes is shown\n"
+        "// Instagram-style on the right side of the screen; tags carry the review\n"
+        "// category + audio status for a future preference algorithm.\n"
+    )
+    with open(MANIFEST, "w", encoding="utf-8") as fp:
+        fp.write(header + "window.VIDEO_MANIFEST = " +
+                 json.dumps(entries, ensure_ascii=False, indent=1) + ";\n")
+    cfg = load_config()
+    cfg["active_pool"] = None
+    save_config(cfg)
+    return entries, missing
+
+
+def git_pull_team_repo(repo):
+    """git pull --rebase in the team repo (cleaned env, 60s timeout).
+    Returns (ok, note); note is the last output line or a reason."""
+    if not os.path.isdir(os.path.join(repo, ".git")):
+        return False, "no git repository at %s" % repo
+    try:
+        r = subprocess.run(["git", "-C", repo, "pull", "--rebase"],
+                           env=_clean_env(), capture_output=True, text=True,
+                           timeout=60)
+    except subprocess.TimeoutExpired:
+        return False, "git pull timed out"
+    except OSError as e:
+        return False, "git not runnable: %s" % e
+    lines = (r.stdout or "").strip().splitlines()
+    note = lines[-1] if lines else ("exit %d" % r.returncode)
+    if not r.returncode == 0 and r.stderr:
+        note = (r.stderr.strip().splitlines() or [note])[-1]
+    return r.returncode == 0, note
+
+
+def team_pool_info(refresh=False):
+    """The GUI's view of the review-team pool: every non-excluded reel with
+    its review status (approved / pending / rejected / excluded), tags, and
+    whether it is in this experiment's pool / on disk."""
+    info = {"repo": TEAM_REPO, "pulled": False, "pullNote": "",
+            "error": None, "counts": {}, "videos": [],
+            "selection": load_team_selection() is not None}
+    pj = os.path.join(TEAM_REPO, "pool.json")
+    if refresh:
+        ok, note = git_pull_team_repo(TEAM_REPO)
+        info["pulled"] = ok
+        info["pullNote"] = note
+    if not os.path.isfile(pj):
+        info["error"] = ("Team repo not found at %s — set FMRI_TEAM_REPO, or "
+                         "run the reel-crawler team_gui setup on this machine."
+                         % TEAM_REPO)
+        return info
+    try:
+        with open(pj, encoding="utf-8") as fp:
+            pool = json.load(fp)
+    except (OSError, json.JSONDecodeError) as e:
+        info["error"] = "Cannot read pool.json: %s" % e
+        return info
+    opinions = team_opinions(TEAM_REPO)
+    in_manifest = manifest_code_set()
+    rows = []
+    n_approved = n_pending = n_excluded = 0
+    for it in (pool.values() if isinstance(pool, dict) else []):
+        if not (isinstance(it, dict)
+                and SHORTCODE_RE.fullmatch(str(it.get("code") or ""))):
+            continue
+        code = str(it["code"])
+        mstat = str(it.get("model_status") or "")
+        op = opinions.get(it.get("url"))
+        action = (op or {}).get("action")
+        if mstat == "excluded":
+            status = "excluded"; n_excluded += 1
+        elif action in ("approve", "category"):
+            status = "approved"; n_approved += 1
+        elif action == "reject":
+            status = "rejected"; n_pending += 1
+        else:
+            status = "pending"; n_pending += 1
+        rows.append({
+            "code": code,
+            "url": str(it.get("url") or "https://www.instagram.com/reel/%s/" % code),
+            "username": str(it.get("username") or ""),
+            "likes": it.get("likes") if isinstance(it.get("likes"), (int, float)) else None,
+            "caption": str(it.get("caption") or "")[:200],
+            "category": str((op or {}).get("category") or it.get("model_category") or "other"),
+            "model_category": str(it.get("model_category") or ""),
+            "audio_status": str(it.get("audio_status") or ""),
+            "status": status,
+            "onDisk": on_disk(code),
+            "inPool": code in in_manifest,
+        })
+    order = {"approved": 0, "pending": 1, "rejected": 2, "excluded": 3}
+    rows.sort(key=lambda r: (order.get(r["status"], 9), r["code"]))
+    info["counts"] = {"total": len(rows), "approved": n_approved,
+                      "pending": n_pending, "excluded": n_excluded}
+    info["videos"] = rows
+    return info
+
+
+def _team_apply(codes):
+    """Background thread: save the selection, download missing reels, rebuild
+    the manifest. Progress goes into TEAM_STATUS."""
+    try:
+        items, pj = load_reels_pool(REELCRAWLER_ROOT)
+        pool = pool_items_by_code(items)
+        opinions = team_opinions(TEAM_REPO)
+        sel_codes = [str(c) for c in codes if SHORTCODE_RE.fullmatch(str(c))]
+        vdir = os.path.join(HERE, "videos")
+        os.makedirs(vdir, exist_ok=True)
+        archive = os.path.join(vdir, "ig_downloaded.txt")
+        jar = os.path.join(REELCRAWLER_ROOT, "instagram-session", "cookies.txt")
+        if jar and not os.path.isfile(jar):
+            jar = None  # no jar — yt-dlp downloads anonymously
+        for code in sel_codes:
+            if on_disk(code):
+                continue
+            it = pool.get(code) or {}
+            url = str(it.get("url") or "https://www.instagram.com/reel/%s/" % code)
+            TEAM_STATUS["log"].append("downloading %s ..." % code)
+            ok, msg = download_reel(url, vdir, archive, jar)
+            if not ok:
+                TEAM_STATUS["failed"].append({"code": code, "msg": msg})
+                TEAM_STATUS["log"].append("%s: FAILED (%s)" % (code, msg))
+                continue
+            TEAM_STATUS["log"].append("%s: %s" % (code, msg))
+            time.sleep(2)
+        with open(TEAM_SELECTION, "w", encoding="utf-8") as fp:
+            json.dump({"codes": sel_codes,
+                       "updated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                    time.gmtime())},
+                      fp, ensure_ascii=False, indent=1)
+        entries, missing = rebuild_manifest(items or [], opinions,
+                                            wanted=sel_codes)
+        TEAM_STATUS["added"] = sel_codes
+        TEAM_STATUS["log"].append(
+            "Manifest: %d video(s) in pool (%d selected, %d missing from disk)."
+            % (len(entries), len(sel_codes), missing))
+    except Exception as e:  # keep the GUI informed, never crash the server
+        TEAM_STATUS["failed"].append({"code": "", "msg": str(e)})
+        TEAM_STATUS["log"].append("ERROR: %s" % e)
+    finally:
+        TEAM_STATUS["running"] = False
+        TEAM_STATUS["done"] = True
+
+
+def team_apply_start(codes):
+    """Start one background team-import. Returns True when started."""
+    if TEAM_STATUS["running"]:
+        return False
+    TEAM_STATUS.update({"running": True, "done": False, "started": time.time(),
+                        "log": [], "added": [], "failed": []})
+    threading.Thread(target=_team_apply, args=(codes,), daemon=True).start()
+    return True
+
+
 def cmd_reels_sync(args):
     """Pull the reel-crawler team pool into the built-in videos/ pool."""
     crawler = os.path.abspath(os.path.expanduser(args.crawler or REELCRAWLER_ROOT))
@@ -822,6 +1142,7 @@ def cmd_reels_sync(args):
             "No pool.json found under %s (expected <reel-crawler>/sync_repo/pool.json). "
             "Point --crawler at the reel-crawler checkout or set FMRI_REELCRAWLER_ROOT."
             % crawler)
+    opinions = team_opinions(os.path.dirname(pj)) if pj else {}
     excluded = [it for it in items
                 if str(it.get("model_status") or "") == "excluded"]
     if excluded and not args.include_excluded:
@@ -829,11 +1150,21 @@ def cmd_reels_sync(args):
               % len(excluded))
         for it in excluded:
             print("  %s  @%s" % (it["code"], it.get("username") or "?"))
-    wanted = [it for it in items
-              if args.include_excluded
-              or str(it.get("model_status") or "") != "excluded"]
-    if args.max and len(wanted) > args.max:
-        wanted = wanted[:args.max]
+    sel = load_team_selection()
+    by_code = pool_items_by_code(items)
+    if sel is not None:
+        print("Selection file videos/pool_selection.json present — pool "
+              "restricted to its %d code(s)." % len(sel))
+        wanted_items = [by_code[c] for c in sel if c in by_code]
+        if not args.include_excluded:
+            wanted_items = [it for it in wanted_items
+                            if str(it.get("model_status") or "") != "excluded"]
+    else:
+        wanted_items = [it for it in items
+                        if args.include_excluded
+                        or str(it.get("model_status") or "") != "excluded"]
+    if args.max and len(wanted_items) > args.max:
+        wanted_items = wanted_items[:args.max]
     vdir = os.path.join(HERE, "videos")
     os.makedirs(vdir, exist_ok=True)
     archive = os.path.join(vdir, "ig_downloaded.txt")
@@ -844,10 +1175,9 @@ def cmd_reels_sync(args):
                else os.path.join(crawler, "instagram-session", "cookies.txt"))
         if jar and not os.path.isfile(jar):
             jar = None  # no jar — yt-dlp downloads anonymously
-        for it in wanted:
+        for it in wanted_items:
             code = str(it["code"])
-            if any(os.path.isfile(os.path.join(vdir, code + ext))
-                   for ext in VIDEO_EXTS):
+            if on_disk(code):
                 existed += 1
                 continue
             url = str(it.get("url") or "https://www.instagram.com/reel/%s/" % code)
@@ -860,41 +1190,9 @@ def cmd_reels_sync(args):
                 print("%s: FAILED (%s)" % (code, msg))
             if args.delay:
                 time.sleep(args.delay)
-    # Rebuild the manifest strictly from pool shortcodes found on disk —
-    # anything that is not a review-team Instagram shortcode never enters.
-    entries = []
-    missing = 0
-    for it in wanted:
-        code = str(it["code"])
-        fn = None
-        for ext in VIDEO_EXTS:
-            if os.path.isfile(os.path.join(vdir, code + ext)):
-                fn = code + ext
-                break
-        if not fn:
-            missing += 1
-            continue
-        e = {"src": "videos/" + fn,
-             "author": str(it.get("username") or ""),
-             "nick": str(it.get("username") or ""),
-             "desc": str(it.get("caption") or "")[:500]}
-        likes = it.get("likes")
-        if isinstance(likes, (int, float)):
-            e["likes"] = int(likes)
-        entries.append(e)
-    header = (
-        "// Video manifest (auto-generated by task.py reels-sync — do not edit by hand;\n"
-        "// pool synced from the review-team reel-crawler pool.json).\n"
-        "// Only Instagram shortcodes from the review-team pool enter this manifest.\n"
-        "// Each entry: { src, author, nick, desc[, likes] } — likes is shown\n"
-        "// Instagram-style on the right side of the screen.\n"
-    )
-    with open(MANIFEST, "w", encoding="utf-8") as fp:
-        fp.write(header + "window.VIDEO_MANIFEST = " +
-                 json.dumps(entries, ensure_ascii=False, indent=1) + ";\n")
-    cfg = load_config()
-    cfg["active_pool"] = None
-    save_config(cfg)
+    wanted = sel if sel is not None else None
+    entries, missing = rebuild_manifest(items, opinions, wanted=wanted,
+                                        include_excluded=args.include_excluded)
     print("Manifest: %d video(s) (pool: %d, model-excluded: %d, downloaded: %d, "
           "already present: %d, failed: %d, missing from disk: %d)."
           % (len(entries), len(items), len(excluded), downloaded, existed,
@@ -919,7 +1217,7 @@ def main(argv=None):
 
     p = sub.add_parser("run", help="configure a run and start the server "
                                    "(auto-starts on page load)")
-    p.add_argument("--center", help="center documentary path or URL")
+    p.add_argument("--center", help="center documentary: lawn|rocky|original, a local path, or a URL")
     p.add_argument("--subject", help="subject id (default P01)")
     p.add_argument("--note", help="free-text note recorded in the log")
     p.add_argument("--duration", type=float, help="run length in minutes")

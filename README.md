@@ -90,7 +90,7 @@ resizes. Both panels can be open at once (one per side).
 | Left-side chance (%) | Random mode only: % of pop-ups that open on the **left** (right = 100 − this) |
 | Pop-up trigger | **Manual** (A opens/closes a pop-up — "internally generated" browsing) / **Auto** (a pop-up opens on its own every N seconds and closes when its clip ends — "externally probed") |
 | Pop-up interval | Auto mode only: seconds between auto pop-ups |
-| Center video | URL of the documentary shown centered (YouTube links auto-convert to embeds; local/remote video files play in a built-in player). Defaults to `center/center.mp4`, a local clip that works offline — YouTube needs internet |
+| Center documentary | 5 choices — **1 Lawn** (`center/stimulus_lawn.mp4`) · **2 Rocky** (`center/stimulus_rocky.mp4`) · **3 Original** (`center/center.mp4`, default) · **4 Custom video file** (type a path, e.g. `center/myvideo.mp4`) · **5 Web link** (paste a YouTube URL — needs internet). Options 4–5 show a text box; 1–3 ignore it. CLI: `--center lawn|rocky|original|<path>|<url>` |
 
 Key mapping: **A** = pop up / close (per the side setting; "both" opens both),
 **B** = next clip in every open panel.
@@ -141,13 +141,39 @@ python3 task.py reels-sync --include-excluded   # also add the model-excluded it
 ```
 
 Author, caption and like count for each reel come straight from the pool
-metadata and are baked into the manifest. `FMRI_REELCRAWLER_ROOT` points at
-the reel-crawler checkout (default: the sibling `reel-crawler/` folder).
-Reopen index.html afterwards — the settings page shows "N real video(s)
-detected".
+metadata and are baked into the manifest — along with **tags** (review
+category / model category / audio status), kept per entry for a future
+preference algorithm. `FMRI_REELCRAWLER_ROOT` points at the reel-crawler
+checkout (default: the sibling `reel-crawler/` folder). Reopen index.html
+afterwards — the settings page shows "N real video(s) detected".
+
+If `videos/pool_selection.json` exists (written by the team-review card,
+below), `reels-sync` restricts the pool to exactly the shortcodes it lists
+instead of the whole team pool.
 
 Playback rules: randomized order, no immediate repeats, endless looping, B advances clip by clip — mimics a live feed.
 Copyright note: real videos for the study must be provided by the lab (own account content or licensed content). This template ships no real videos — the placeholder clips are animated, not real.
+
+### Team review card (pick approved reels from the lab GitHub)
+
+The settings page card **Instagram pool · team review** (server mode) links
+this experiment to the review team's GitHub repo — the same
+`reel-crawler/sync_repo` checkout the team uses (`FMRI_TEAM_REPO` overrides
+the location):
+
+- **Refresh from GitHub** runs `git pull` in that repo (no credentials are
+  stored or read by this project — the checkout's own remote does the work)
+- every non-excluded reel is listed with its review status — **approved**
+  (a team decision), awaiting review, rejected, or model-excluded — plus its
+  category / audio tags, @author and like count
+- tick the reels this experiment should use and press **Apply pool list**:
+  the choice is saved to `videos/pool_selection.json`, missing videos are
+  downloaded in the background (progress is shown in the card), and the
+  manifest is rebuilt with tags intact
+
+Machines without the reel-crawler checkout (e.g. scanner computers) simply
+see a hint — the built-in pool keeps working, and `reels-sync` still fills
+it from a pool file.
 
 ### Video folders (import a pool from anywhere on disk)
 
@@ -410,7 +436,7 @@ python3 task.py run --subject P01 --duration 10 --trigger immediate \
 | 左侧出现概率（%） | 仅随机模式：弹出出现在**左侧**的百分比（右侧 = 100 − 此值） |
 | 弹出方式 | **手动**（按 A 开/关弹窗——「自发生成」式浏览）/ **自动**（每 N 秒自动弹出，视频播完自动收起——「外部探测」式） |
 | 弹出间隔 | 仅自动模式：两次自动弹出间隔秒数 |
-| 中央视频 | 居中播放的纪录片 URL（YouTube 链接自动转为嵌入；本地/远程视频文件用内置播放器播放）。默认 `center/center.mp4`——本地片段，离线可用；YouTube 需联网 |
+| 中央纪录片 | 5 个选项——**1 Lawn**（`center/stimulus_lawn.mp4`）· **2 Rocky**（`center/stimulus_rocky.mp4`）· **3 原版**（`center/center.mp4`，默认）· **4 自选本地文件**（填路径，如 `center/myvideo.mp4`）· **5 网络链接**（粘贴 YouTube 链接——需联网）。选项 4–5 会显示输入框；1–3 忽略输入框。命令行：`--center lawn|rocky|original|<路径>|<链接>` |
 
 按键：**A** = 按方向设置弹出/收起（「两侧」则同时弹出两个），**B** = 每个打开的面板各换下一条。
 
@@ -457,13 +483,34 @@ python3 task.py reels-sync --max 5         # 限制条数（快速测试池）
 python3 task.py reels-sync --include-excluded   # 把模型排除的条目也加进来
 ```
 
-每条 reel 的作者、文案和点赞数直接取自池元数据并写进清单。
-`FMRI_REELCRAWLER_ROOT` 指向 reel-crawler 检出的目录（默认：旁边的
-`reel-crawler/` 文件夹）。之后重开 index.html，设置页会显示「检测到 N 条
-真实视频」。
+每条 reel 的作者、文案和点赞数直接取自池元数据并写进清单——同时保留
+**标签**（审核分类 / 模型分类 / 音频状态），逐条存入清单，供将来的
+preference 算法使用。`FMRI_REELCRAWLER_ROOT` 指向 reel-crawler 检出的目录
+（默认：旁边的 `reel-crawler/` 文件夹）。之后重开 index.html，设置页会显示
+「检测到 N 条真实视频」。
+
+若 `videos/pool_selection.json` 存在（由下方团队审核卡片写入），
+`reels-sync` 会把视频池严格限制为文件里列出的 shortcode，而不是整个团队池。
 
 播放规则：随机排序、同条不连续、循环不到头，B 键逐条切换——模拟「实时推荐流」。
 版权提醒：正式实验视频由实验室自备（自己账号内容或获授权内容），本模板不内置任何真实视频——内置的是动画占位内容，不是真实视频。
+
+### 团队审核卡片（从实验室 GitHub 挑选已通过的 reels）
+
+设置页的 **Instagram 视频池 · 团队审核** 卡片（服务器模式）把本实验与
+审核团队的 GitHub 仓库连起来——就是团队在用的
+`reel-crawler/sync_repo` 检出目录（`FMRI_TEAM_REPO` 可改位置）：
+
+- **从 GitHub 刷新** 会在该仓库执行 `git pull`（本项目不存储也不读取任何
+  凭据——由该检出自带的 remote 完成）
+- 每条未被排除的 reel 都列出审核状态——**已通过**（团队有决定）、待审核、
+  已驳回或模型已排除——并附分类 / 音频标签、@作者和点赞数
+- 勾选本实验要用的 reels 后点 **应用视频池列表**：选择保存到
+  `videos/pool_selection.json`，缺失的视频在后台下载（卡片内显示进度），
+  清单重建且标签完整保留
+
+没有 reel-crawler 检出的机器（如扫描间电脑）会看到提示——内置视频池照常
+工作，`reels-sync` 仍可从池文件填充。
 
 ### 视频文件夹（从磁盘任意位置导入视频池）
 
