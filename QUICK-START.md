@@ -13,10 +13,16 @@ Every key press and every video is logged.
 # 1a. Sync the reel pool — downloads Instagram reels into videos/
 python3 task.py reels-sync
 #     (needs python3 and yt-dlp; install with: pip3 install yt-dlp)
+#     Works right after unzipping — the repo ships with a pool.json snapshot.
+#     For reels the review team approved later, refresh pool.json from the lab
+#     repo first (or use the "team review" card where the lab checkout exists).
 
-# 1b. Documentaries live in center/. This laptop already has all three:
+# 1b. Documentaries live in center/. Videos are too large for GitHub, so the
+#     zip ships with none of them — copy the lab's documentaries into center/
+#     (this laptop already has all three):
 #     center/stimulus_lawn.mp4  ·  center/stimulus_rocky.mp4  ·  center/center.mp4
-#     On a scanner machine, copy the project folder as-is — the videos come along.
+#     No documentary at hand? Skip this step — pick option 4 (any local MP4)
+#     or option 5 (web link) on the settings page instead.
 ```
 
 Re-run `python3 task.py reels-sync` whenever the pool gains new reels.
@@ -90,10 +96,15 @@ video was on screen at which moment, with every key press marked.
 # 1a. 同步视频池 — 把 Instagram reels 下载到 videos/
 python3 task.py reels-sync
 #     （需要 python3 和 yt-dlp；安装：pip3 install yt-dlp）
+#     解压 zip 后即可直接运行——仓库自带 pool.json 快照。
+#     想加入审核团队后来新通过的 reels，先从实验室仓库刷新 pool.json
+#     （或是在有实验室 checkout 的机器上用设置页的「团队审核」卡片）。
 
-# 1b. 纪录片放在 center/ 里。本机已放好三个：
+# 1b. 纪录片放在 center/ 里。视频太大进不了 GitHub，zip 里不包含纪录片——
+#     把实验室的纪录片拷进 center/（本机已放好三个）：
 #     center/stimulus_lawn.mp4 · center/stimulus_rocky.mp4 · center/center.mp4
-#     换到扫描机时直接整体拷贝项目文件夹，视频会一起带过去。
+#     手上没有纪录片？跳过这步——在设置页改用选项 4（任意本地 MP4）
+#     或选项 5（网络链接）。
 ```
 
 视频池加入新视频后，重新跑一次 `python3 task.py reels-sync` 即可。

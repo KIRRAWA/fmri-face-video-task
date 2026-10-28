@@ -1138,10 +1138,21 @@ def cmd_reels_sync(args):
     crawler = os.path.abspath(os.path.expanduser(args.crawler or REELCRAWLER_ROOT))
     items, pj = load_reels_pool(crawler)
     if not items:
+        # Newcomers who downloaded the GitHub zip have no reel-crawler
+        # checkout next to the project: fall back to the pool.json snapshot
+        # bundled in this repository.
+        bundled, bundled_pj = load_reels_pool(HERE)
+        if bundled:
+            items, pj = bundled, bundled_pj
+            print("No reel-crawler checkout found — using the bundled "
+                  "pool.json snapshot (%d items). Refresh it from the "
+                  "review-team repo to pick up newly approved reels."
+                  % len(items))
+    if not items:
         raise SystemExit(
-            "No pool.json found under %s (expected <reel-crawler>/sync_repo/pool.json). "
-            "Point --crawler at the reel-crawler checkout or set FMRI_REELCRAWLER_ROOT."
-            % crawler)
+            "No pool.json found under %s (expected <reel-crawler>/sync_repo/pool.json) "
+            "and no bundled pool.json snapshot. Point --crawler at the reel-crawler "
+            "checkout or set FMRI_REELCRAWLER_ROOT." % crawler)
     opinions = team_opinions(os.path.dirname(pj)) if pj else {}
     excluded = [it for it in items
                 if str(it.get("model_status") or "") == "excluded"]

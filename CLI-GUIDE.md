@@ -110,6 +110,11 @@ python3 task.py reels-sync --cookies /path/to/cookies.txt  # logged-in downloads
 python3 task.py reels-sync --delay 2    # pause between downloads (default)
 ```
 
+Without a reel-crawler checkout (e.g. right after downloading the GitHub
+zip), `reels-sync` falls back to the `pool.json` snapshot bundled in this
+repository — refresh that file from the review-team repo to pick up newly
+approved reels.
+
 `reels-sync` options:
 
 | Option | Meaning | Default |
@@ -185,6 +190,7 @@ count.
 | `config.json` | CLI settings + registered folders + active pool (created by `task.py`) |
 | `config.js` | What the page loads — CLI settings override localStorage |
 | `videos/manifest.js` | The active video pool — rebuilt by `reels-sync` (review-team shortcodes only) or by a folder import |
+| `pool.json` | Bundled review-team pool snapshot — `reels-sync` falls back to it when no reel-crawler checkout exists (zip newcomers) |
 | `videos/pool_selection.json` | Optional pinned selection (gitignored): when present, the pool is restricted to the listed shortcodes |
 | `videos/ig_downloaded.txt` | `reels-sync` download archive (gitignored) |
 | `data/events.jsonl` | One JSON line per finished run (server mode; includes the `timelineFile` pointer but not the HTML itself) |
